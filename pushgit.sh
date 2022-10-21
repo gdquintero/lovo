@@ -1,4 +1,4 @@
-now=`date +"%m-%d-%Y"`
+now=`date +"%Y-%m-%d"`
 hour=`date +"%H:%M"`
 git add -A
 
