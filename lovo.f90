@@ -1,5 +1,6 @@
 program lovo
 
+    use sort
     use bmalgencan, only: algencan
     use iso_c_binding, only: c_ptr, c_loc,c_f_pointer
   
@@ -7,6 +8,9 @@ program lovo
 
     ! LOVO Algorithm variables
     integer :: i
+    real(kind=8) :: fmin
+    real(kind=8), allocatable :: fmin_aux(:),indices(:)
+
 
     ! COMMON INTEGERS
     integer :: samples,q 
@@ -44,7 +48,7 @@ program lovo
 
     read(100,*) samples
 
-    allocate(t(samples),y(samples),stat=allocerr)
+    allocate(t(samples),y(samples),fmin_aux(samples),indices(samples),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error in main program'
@@ -62,7 +66,7 @@ program lovo
   
     ! Number of variables
   
-    n = 4
+    n = 3
     
     allocate(x(n),lind(n),lbnd(n),uind(n),ubnd(n),stat=allocerr)
   
@@ -73,7 +77,7 @@ program lovo
   
     ! Initial guess and bound constraints
     
-    x(1:n) = 10.0d0
+    x(1:n) = 1.0d0
   
     lind(1:n) = .false.
     ! lbnd(1:n) = - 100.0d0
@@ -85,6 +89,9 @@ program lovo
     
     m = 0
     p = 1
+
+    call compute_fmin(n,x,fmin_aux,fmin)
+
   
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -228,19 +235,48 @@ program lovo
     stop
   
     contains  
+    ! *****************************************************************
+    ! *****************************************************************
 
+    subroutine compute_fmin(n,x,faux,f)
+
+        implicit none
+
+        integer,        intent(in) :: n
+        real(kind=8),   intent(in) :: x(n)
+        real(kind=8),   intent(inout) :: faux(samples)
+        real(kind=8),   intent(out) :: f
+        integer :: i,kflag
+
+        faux = 0.0d0
+
+        kflag = 2
+
+        indices(:) = (/(i, i = 1, samples)/)
+        
+        do i = 1, samples
+            call fi(n,x,i,faux(i))
+        end do
+
+        ! Sorting
+        call DSORT(faux,indices,samples,kflag)
+
+        print*, faux(1:20)
+
+    end subroutine compute_fmin
     ! *****************************************************************
     ! *****************************************************************
 
     subroutine fi(n,x,i,f)
+
         implicit none
 
         integer,        intent(in) :: n,i
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out):: f
+        real(kind=8),   intent(out) :: f
         
-        f = model(n,x,i,f) - y(i)
-        f = 0.5d0 * (f**2)
+        call model(n,x,i,f)
+        f = 0.5d0 * ((f - y(i))**2)
 
     end subroutine fi
 
@@ -253,7 +289,7 @@ program lovo
 
         integer,        intent(in) :: n,i
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out):: f   
+        real(kind=8),   intent(out) :: f   
 
         f = y(samples) + &
             x(1) * (t(i) - t(samples)) + &
