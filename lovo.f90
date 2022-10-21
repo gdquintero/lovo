@@ -246,11 +246,12 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine train_test_split()
+    subroutine train_test_split(samples_train,samples_validation,rows,train,validation)
 
         implicit none
 
-        
+        integer,        intent(in) :: rows, samples_train, samples_validation
+        real(kind=8),   intent(out) :: train(rows,samples_train),validation(rows,samples_validation)        
 
 
     end subroutine train_test_split
