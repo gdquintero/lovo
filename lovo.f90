@@ -7,7 +7,7 @@ program lovo
     implicit none
 
     ! LOVO Algorithm variables
-    integer :: i,i4_choose
+    integer :: i, rows
     real(kind=8) :: fmin
     real(kind=8), allocatable :: fmin_aux(:),indices(:),train(:,:),validation(:,:)
 
@@ -50,9 +50,12 @@ program lovo
 
     samples_train = 10
     samples_validation = 30
+    rows= samples - (samples_train + samples_validation) + 1
+
+    print*, rows
 
     allocate(t(samples),y(samples),fmin_aux(samples),indices(samples),&
-            train(10,samples_train),validation(10,samples_validation),stat=allocerr)
+            train(rows,samples_train),validation(rows,samples_validation),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error in main program'
@@ -93,8 +96,6 @@ program lovo
     
     m = 0
     p = 1
-
-    print*, i4_choose(900,10)
 
     call compute_fmin(n,x,fmin_aux,fmin)
 
