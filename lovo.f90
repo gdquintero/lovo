@@ -253,7 +253,7 @@ program lovo
         real(kind=8),   intent(out) :: train(rows,samples_train),validation(rows,samples_validation)    
         integer :: i,j,k
 
-        ! Mounting train and validation
+        ! Mounting train and validation matrices
         do i = 1, rows
 
             k = i
@@ -264,12 +264,10 @@ program lovo
 
             k = i
             do j = 1, samples_validation
-                validation(i,j) = k + samples_train
+                validation(i,j) = y(k + samples_train)
+                k = k + 1
             enddo
         enddo
-
-
-
 
     end subroutine train_test_split
 
