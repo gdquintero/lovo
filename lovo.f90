@@ -81,7 +81,7 @@ Program lovo
 
     nvparam   = 1
     vparam(1) = 'ITERATIONS-OUTPUT-DETAIL 0' 
-
+    
     ! q = 36
 
     ! call ovo_algorithm(delta,fobj)
