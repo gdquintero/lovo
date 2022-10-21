@@ -1,545 +1,431 @@
-Program lovo
-    use sort
+! *****************************************************************
+! *****************************************************************
 
-    implicit none 
-    
-    integer :: allocerr,i
-    real(kind=8) :: epsilon,theta,alpha,fobj,fxk,fxtrial,gaux,ti,sigmin
-    real(kind=8), allocatable :: xtrial(:),faux(:),indices(:),xaux(:),xk(:)
-    integer, allocatable :: Idelta(:)
+! This is a main program that calls Algencan to solve a simple
+! problem. It is intended to be used as an (incomplete) example of
+! usage. Algencan applies to problems of the form
+!
+! Minimize f(x)
+!
+! subject to
+!
+!   heq(x) = 0    heq : R^n \to R^m represents the equality constraints
+!   hin(x) <= 0   hin : R^n \to R^p represents the inequality constraints
+!   l <= x <= u   l and u \in R^n are the bound constraints.
 
-    ! COMMON INTEGERS
-    integer :: samples,q 
+! *****************************************************************
+! *****************************************************************
 
-    ! COMMON ARRAYS
-    real(kind=8),   pointer :: t(:),y(:),grad(:,:)
+program lovo
 
-    ! COMMON BLOCKS
-    common /integerData/ samples,q
-    common /vectorData/ t,y,grad
-
+    use bmalgencan, only: algencan
+    use iso_c_binding, only: c_ptr, c_loc,c_f_pointer
+  
+    implicit none
+  
+    ! Re-define this type (pdata_type) anyway you want. Algencan
+    ! receives a pointer to a 'structure of this type'. Algencan has no
+    ! access to the structure. It simple passes the pointer back to the
+    ! user defined subroutines evalf, evalg, evalc, evalj, and
+    ! evalhl. So, this is a trade safe way (no common blocks) of passing
+    ! to the user-provided routines any information related to the
+    ! problem. In this example, it is only being used for the user to
+    ! count by itself the number of calls to each routine.
+    type :: pdata_type
+       integer :: counters(5) = 0
+    end type pdata_type
+  
     ! LOCAL SCALARS
-    logical :: checkder
-    integer :: hnnzmax,inform,jcnnzmax,m,n,nvparam
-    real(kind=8) :: cnorm,efacc,efstain,eoacc,eostain,epsfeas,epsopt,f,nlpsupn,snorm
-
+    logical :: corrin,extallowed,rhoauto,scale
+    integer :: allocerr,hlnnzmax,ierr,inform,istop,jnnzmax,m,maxoutit,n,nwcalls,nwtotit,outiter,p,totiter
+    real(kind=8) :: bdsvio,csupn,epsfeas,epscompl,epsopt,f,finish,nlpsupn,rhoini,ssupn,start
+    type(pdata_type), target :: pdata
+    
     ! LOCAL ARRAYS
-    character(len=80) :: specfnm,outputfnm,vparam(10)
-    logical :: coded(11)
-    real(kind=8),   pointer :: l(:),u(:),x(:)
-
-    ! Set parameters
-    n = 5
-    epsilon = 1.0d-4
-    theta = 0.5d0
-    sigmin = 1.0d0
-
-    Open(Unit = 100, File = "output/data.txt", ACCESS = "SEQUENTIAL")
-
-    read(100,*) samples
-
-    allocate(t(samples),y(samples),x(n),xk(n-1),xtrial(n-1),l(n),u(n),xaux(n-1),&
-    faux(samples),indices(samples),Idelta(samples),stat=allocerr)
-
+    logical, allocatable :: lind(:),uind(:)
+    real(kind=8), allocatable :: c(:),lbnd(:),ubnd(:),lambda(:),x(:)
+  
+    ! Number of variables
+  
+    n = 2
+    
+    allocate(x(n),lind(n),lbnd(n),uind(n),ubnd(n),stat=allocerr)
+  
     if ( allocerr .ne. 0 ) then
-        write(*,*) 'Allocation error in main program'
-        stop
+       write(*,*) 'Allocation error.'
+       stop
     end if
-
-    do i = 1, samples
-        read(100,*) y(i)
-        t(i) = i
-    enddo
-
-    close(100)
-
-    ! Coded subroutines
-
-    coded(1:6)  = .true.  ! evalf, evalg, evalh, evalc, evaljac, evalhc
-    coded(7:11) = .false. ! evalfc,evalgjac,evalgjacp,evalhl,evalhlp
-
-
-    ! Upper bounds on the number of sparse-matrices non-null elements
-    jcnnzmax = 10000
-    hnnzmax  = 10000
-
-    ! Checking derivatives?
-    checkder = .false.
-
-    ! Parameters setting
-    epsfeas   = 1.0d-08
-    epsopt    = 1.0d-08
   
-    efstain   = sqrt( epsfeas )
-    eostain   = epsopt ** 1.5d0
+    ! Initial guess and bound constraints
+    
+    x(1:n) = 10.0d0
   
-    efacc     = sqrt( epsfeas )
-    eoacc     = sqrt( epsopt )
-
-    outputfnm = ''
-    specfnm   = ''
-
-    nvparam   = 1
-    vparam(1) = 'ITERATIONS-OUTPUT-DETAIL 0' 
+    lind(1:n) = .true.
+    lbnd(1:n) = - 100.0d0
+  
+    uind(1:n) = .true.
+    ubnd(1:n) =   100.0d0
+  
+    ! Number equality (m) and inequality (p) constraints.
     
-    ! q = 36
-
-    ! call ovo_algorithm(delta,fobj)
-
-    ! call export(xstar)
-
-    CONTAINS
-
-    !==============================================================================
-    ! MAIN ALGORITHM
-    !==============================================================================
-    subroutine ovo_algorithm(delta,fobj)
-        implicit none
-
-        real(kind=8),   intent(in) :: delta
-        real(kind=8),   intent(out) :: fobj
-
-        logical,        pointer :: equatn(:),linear(:)
-        real(kind=8),   pointer :: lambda(:)
-
-        real(kind=8)        :: Mk, aux
-        integer, parameter  :: max_iter = 1000, max_iter_sub = 100, kflag = 2
-        integer             :: iter,iter_sub,i
-
-        ! Initial solution
-        xk(:) = (/-1.0d0,-2.0d0,1.0d0,-1.0d0/)
-
-        iter = 0
+    m = 0
+    p = 1
+  
+    allocate(lambda(m+p),c(m+p),stat=allocerr)
+  
+    if ( allocerr .ne. 0 ) then
+       write(*,*) 'Allocation error.'
+       stop
+    end if
+  
+    ! Initial guess for the Lagrange multipliers
     
-        indices(:) = (/(i, i = 1, samples)/)
+    lambda(1:m+p) = 0.0d0
+  
+    ! Number of entries in the Jacobian of the constraints
     
-        ! Scenarios
-        do i = 1, samples
-            faux(i) = fi(xk,i,n)
-        end do
+    jnnzmax = n
+  
+    ! This should be the number of entries in the Hessian of the
+    ! Lagrangian. But, in fact, some extra space is need (to store the
+    ! Hessian of the Augmented Lagrangian, whose size is hard to
+    ! predict, and/or to store the Jacobian of the KKT system). Thus,
+    ! declare it as large as possible.
     
-        ! Sorting
-        call DSORT(faux,indices,samples,kflag)
+    hlnnzmax = 100000
+  
+    ! Feasibility, complementarity, and optimality tolerances
     
-        ! q-Order-Value function 
-        fxk = faux(q)
+    epsfeas  = 1.0d-08
+    epscompl = 1.0d-08
+    epsopt   = 1.0d-08
+  
+    ! Maximum number of outer iterations
     
-        call mount_Idelta(faux,indices,delta,Idelta,m)
-        
+    maxoutit = 50
+  
+    ! rhoauto means that Algencan will automatically set the initial
+    ! value of the penalty parameter. If you set rhoauto = .false. then
+    ! you must set rhoini below with a meaningful value.
+    rhoauto = .true.
+  
+    if ( .not. rhoauto ) then
+       rhoini = 1.0d-08
+    end if
+  
+    ! scale = .true. means that you allow Algencan to automatically
+    ! scale the constraints. In any case, the feasibility tolerance
+    ! (epsfeas) will be always satisfied by the UNSCALED original
+    ! constraints.
+    scale = .false.
+  
+    ! extallowed = .true. means that you allow Gencan (the active-set
+    ! method used by Algencan to solve the bound-constrained
+    ! subproblems) to perform extrapolations. This strategy may use
+    ! extra evaluations of the objective function and the constraints
+    ! per iterations; but it uses to provide overal savings. You should
+    ! test both choices for the problem at hand.
+    extallowed = .true.
+  
+    ! extallowed = .true. means that you allow the inertia of the
+    ! Jacobian of the KKT system to be corrected during the acceleration
+    ! process. You should test both choices for the problem at hand.
+    corrin = .false.
+  
+    call cpu_time(start)
+  
+    call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
+         n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
+         scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
+         outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
+  
+    call cpu_time(finish)
+  
+    write(*,*)
+    write(*,*) 'Number of variables                                   = ',n
+    write(*,*) 'Number of equality constraints                        = ',m
+    write(*,*) 'Number of inequality constraints                      = ',p
     
-        do
-            iter = iter + 1
-
-            l(1:n-1) = (/(max(-10.0d0 - xk(i), - 1.0d0), i = 1, n-1)/)
-            l(n) = -1.0d+20
-
-            u(1:n-1) = (/(min(10.0d0 - xk(i), + 1.0d0), i = 1, n-1)/)
-            u(n) = 1.0d+20
-
-            allocate(equatn(m),linear(m),lambda(m),grad(m,n-1),stat=allocerr)
+    write(*,*)
+    write(*,*) '(REPORTED BY SOLVER) istop                            = ',istop
+    write(*,*) '(REPORTED BY SOLVER) ierr                             = ',ierr
+    write(*,*) '(REPORTED BY SOLVER) f                                = ',f
+    write(*,*) '(REPORTED BY SOLVER) csupn                            = ',csupn
+    write(*,*) '(REPORTED BY SOLVER) ssupn                            = ',ssupn
+    write(*,*) '(REPORTED BY SOLVER) nlpsupn                          = ',nlpsupn
+    write(*,*) '(REPORTED BY SOLVER) bounds violation                 = ',bdsvio
+    write(*,*) '(REPORTED BY SOLVER) Number of outer iterations       = ',outiter
+    write(*,*) '(REPORTED BY SOLVER) Number of inner iterations       = ',totiter
+    write(*,*) '(REPORTED BY SOLVER) Number of Newton-KKT trials      = ',nwcalls
+    write(*,*) '(REPORTED BY SOLVER) Number of Newton-KKT iterations  = ',nwtotit
     
-            if ( allocerr .ne. 0 ) then
-                write(*,*) 'Allocation error in main program'
-                stop
-            end if
+    write(*,*)
+    write(*,*) '(COMPUTED BY CALLER) Number of calls to evalf         = ',pdata%counters(1)
+    write(*,*) '(COMPUTED BY CALLER) Number of calls to evalg         = ',pdata%counters(2)
+    write(*,*) '(COMPUTED BY CALLER) Number of calls to evalc         = ',pdata%counters(3)
+    write(*,*) '(COMPUTED BY CALLER) Number of calls to evalj         = ',pdata%counters(4)
+    write(*,*) '(COMPUTED BY CALLER) Number of calls to evalhl        = ',pdata%counters(5)
+    write(*,*) '(COMPUTED BY CALLER) CPU time in seconds              = ',finish - start
+  
+    ! *****************************************************************
+    ! *****************************************************************
+    ! Just checking ...
+  
+    inform = 0
     
-            equatn(:) = .false.
-            linear(:) = .true.
-            lambda(:) = 0.0d0
+    call evalf(n,x,f,inform,c_loc(pdata))
     
-            do i = 1, m
-                ti = t(Idelta(i))
-                gaux = model(xk,Idelta(i),n) - y(Idelta(i))
+    if ( inform .ne. 0 ) then
+       write(*,*) 'error when calling evalf in the main file. '
+       stop
+    end if
+  
+    call evalc(n,x,m,p,c,inform,c_loc(pdata))
+  
+    if ( inform .ne. 0 ) then
+       write(*,*) 'error when calling evalc in the main file. '
+       stop
+    end if
+  
+    csupn = max( 0.0d0, max( maxval( abs( c(1:m) ) ), maxval( c(m+1:m+p) ) ) )
+  
+    bdsvio = max( 0.0d0, max( maxval( lbnd(1:n) - x(1:n), lind(1:n) ), maxval( x(1:n) - ubnd(1:n), uind(1:n) ) ) )
+  
+    write(*,*)
+    write(*,*) '(COMPUTED BY CALLER) f                                = ',f
+    write(*,*) '(COMPUTED BY CALLER) csupn                            = ',csupn
+    write(*,*) '(COMPUTED BY CALLER) bounds violation                 = ',bdsvio
+  
+    write(*,*)
+    write(*,*) 'When a quantity appears as computed by solver and computed by caller, they must coincide.'
+    write(*,*) '(In case they do not coincide, please report it as a bug.)'
+    ! *****************************************************************
+    ! *****************************************************************
     
-                grad(i,1) = 1.0d0
-                grad(i,2) = ti
-                grad(i,3) = ti**2
-                grad(i,4) = ti**3
+    deallocate(lind,lbnd,uind,ubnd,x,lambda,c,stat=allocerr)
     
-                grad(i,:) = gaux * grad(i,:)
-            end do
+    if ( allocerr .ne. 0 ) then
+       write(*,*) 'Deallocation error.'
+       stop
+    end if
     
-            x(:) = (/xk(:),0.0d0/)
-            ! x(:) = 0.0d0
+    stop
+  
+  contains
     
-            ! Minimizing using ALGENCAN
-            call algencan(myevalf,myevalg,myevalh,myevalc,myevaljac,myevalhc,   &
-                    myevalfc,myevalgjac,myevalgjacp,myevalhl,myevalhlp,jcnnzmax,    &
-                    hnnzmax,epsfeas,epsopt,efstain,eostain,efacc,eoacc,outputfnm,   &
-                    specfnm,nvparam,vparam,n,x,l,u,m,lambda,equatn,linear,coded,    &
-                    checkder,f,cnorm,snorm,nlpsupn,inform)
-
-            ! Backtracking
-            iter_sub = 1
-            alpha = 1.0d0
-            do 
-                xtrial(:) = xk(:) + alpha * x(1:n-1)
-
-                indices(:) = (/(i, i = 1, samples)/)
-
-                ! Scenarios
-                do i = 1, samples
-                    faux(i) = fi(xtrial,i,n)
-                end do
+    ! *****************************************************************
+    ! *****************************************************************
+  
+    subroutine evalf(n,x,f,inform,pdataptr)
+  
+      implicit none
+  
+      ! SCALAR ARGUMENTS
+      integer, intent(in) :: n
+      integer, intent(inout) :: inform
+      real(kind=8), intent(out) :: f
+      type(c_ptr), optional, intent(in) :: pdataptr
+  
+      ! ARRAY ARGUMENTS
+      real(kind=8), intent(in) :: x(n)
+  
+      ! This routine must compute the objective function.
+      
+      ! LOCAL SCALARS
+      type(pdata_type), pointer :: pdata
+      
+      call c_f_pointer(pdataptr,pdata)
+      pdata%counters(1) = pdata%counters(1) + 1
+      
+      f = ( x(1) + 4.0d0 ) ** 4.0d0 + x(2) ** 2.0d0
+      
+    end subroutine evalf
+  
+    ! *****************************************************************
+    ! *****************************************************************
+  
+    subroutine evalg(n,x,g,inform,pdataptr)
+  
+      implicit none
+  
+      ! SCALAR ARGUMENTS
+      integer, intent(in) :: n
+      integer, intent(inout) :: inform
+      type(c_ptr), optional, intent(in) :: pdataptr
     
-                ! Sorting
-                call DSORT(faux,indices,samples,kflag)
-        
-                fxtrial = faux(q)
-        
-                ! Test the sufficient descent condition
-                if (fxtrial .le. (fxk + alpha * theta * x(n))) exit
-                if (iter_sub .ge. max_iter_sub) exit
-    
-                iter_sub = iter_sub + 1
-                ! alpha = 0.5d0 * alpha * (sigmax - sigmin)
-                alpha = 0.5d0 * alpha
-            end do ! End of backtracking
-    
-            ! print*, iter, iter_sub, fxtrial, abs(x(n))
-    
-            if (abs(x(n)) .le. epsilon) exit
-            if (iter .ge. max_iter) exit
-    
-            deallocate(lambda,equatn,linear,grad)
-            
-            xk(:) = xtrial(:)
-            fxk = fxtrial
-    
-            call mount_Idelta(faux,indices,delta,Idelta,m)
-    
-        end do ! End of Main Algorithm
-
-        fobj = fxtrial
-        print*, "Iteracoes: ", iter
-        print*, "Solucao: ", xk
-        print*, "fobj: ", fxk
-    end subroutine
-
-    !==============================================================================
-    ! EXPORT RESULT TO PLOT
-    !==============================================================================
-    subroutine export(xsol)
-        implicit none
-
-        real(kind=8),   intent(in) :: xsol(n-1)
-
-        Open(Unit = 10, File = "output/xstarovo.txt", ACCESS = "SEQUENTIAL")
-
-        write(10,*) xsol(1)
-        write(10,*) xsol(2)
-        write(10,*) xsol(3)
-        write(10,*) xsol(4)
-
-        close(10)
-
-    end subroutine export
-
-    !==============================================================================
-    ! MOUNT THE SET OF INDICES I(x,delta)
-    !==============================================================================
-    subroutine mount_Idelta(f,indices,delta,Idelta,m)
-        implicit none
-
-        real(kind=8),   intent(in) :: delta,f(samples),indices(samples)
-        integer,        intent(out) :: Idelta(samples),m
-        integer :: i
-        real(kind=8) :: fq
-
-        Idelta(:) = 0
-        fq = f(q)
-        m = 0
-
-        do i = 1, samples
-            if (abs(fq - f(i)) .le. delta) then
-                m = m + 1
-                Idelta(m) = int(indices(i))
-            end if
-        end do
-
-    end subroutine
-
-    !==============================================================================
-    ! QUADRATIC ERROR OF EACH SCENARIO
-    !==============================================================================
-    function fi(x,i,n) result (res)
-        implicit none
-
-        integer,        intent(in) :: n,i
-        real(kind=8),   intent(in) :: x(n-1)
-        real(kind=8) :: res
-        
-        res = model(x,i,n) - y(i)
-        res = 0.5d0 * (res**2)
-
-    end function fi
-
-    !==============================================================================
-    ! MODEL TO BE FITTED TO THE DATA
-    !==============================================================================
-    function model(x,i,n) result (res)
-        implicit none 
-
-        integer,        intent(in) :: n,i
-        real(kind=8),   intent(in) :: x(n-1)
-        real(kind=8) :: res      
-
-        res = x(1) + x(2) * t(i) + x(3) * (t(i)**2) + x(4) * (t(i)**3)
-
-    end function model
-
-    !==============================================================================
-    ! SUBROUTINES FOR ALGENCAN
-    !==============================================================================
-
-    !******************************************************************************
-    ! OBJECTIVE FUNCTION
-    !******************************************************************************
-    subroutine myevalf(n,x,f,flag)
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        integer, intent(in) :: n
-        integer, intent(out) :: flag
-        real(kind=8), intent(out) :: f
-
-        ! ARRAY ARGUMENTS
-        real(kind=8), intent(in) :: x(n)
-
-        ! Compute objective function
-
-        flag = 0
-
-        f = x(n)
-
-    end subroutine myevalf
-
-    !******************************************************************************
-    ! GRADIENT OF THE OBJECTIVE FUNCTION
-    !******************************************************************************
-    subroutine myevalg(n,x,g,flag)
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        integer, intent(in) :: n
-        integer, intent(out) :: flag
-
-        ! ARRAY ARGUMENTS
-        real(kind=8), intent(in) :: x(n)
-        real(kind=8), intent(out) :: g(n)
-
-        ! Compute gradient of the objective function
-
-        flag = 0
-
-        g(1:n-1) = 0.0d0
-        g(n)     = 1.0d0
-
-    end subroutine myevalg
-
-    !******************************************************************************
-    ! HESSIAN FOR THE OBJECTIVE FUNCTION
-    !******************************************************************************
-    subroutine myevalh(n,x,hrow,hcol,hval,hnnz,lim,lmem,flag)
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(out) :: lmem
-        integer, intent(in) :: lim,n
-        integer, intent(out) :: flag,hnnz
-
-        ! ARRAY ARGUMENTS
-        integer, intent(out) :: hcol(lim),hrow(lim)
-        real(kind=8), intent(in)  :: x(n)
-        real(kind=8), intent(out) :: hval(lim)
-
-        ! Compute (lower triangle of the) Hessian of the objective function
-        flag = 0
-        lmem = .false.
-        hnnz = 0
-    end subroutine myevalh
-
-    !******************************************************************************
-    ! CONSTRAINTS
-    !******************************************************************************
-    subroutine myevalc(n,x,ind,c,flag)
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        integer, intent(in) :: ind,n
-        integer, intent(out) :: flag
-        real(kind=8), intent(out) :: c
-
-        ! ARRAY ARGUMENTS
-        real(kind=8), intent(in) :: x(n)
-
-        ! Compute ind-th constraint
-        flag = 0
-
-        c = dot_product(x(1:n-1),grad(ind,1:n-1)) - x(n)
-
-    end subroutine myevalc
-
-    !******************************************************************************
-    ! JACOBIAN OF THE CONSTRAINTS
-    !******************************************************************************
-    subroutine myevaljac(n,x,ind,jcvar,jcval,jcnnz,lim,lmem,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(out) :: lmem
-        integer, intent(in) :: ind,lim,n
-        integer, intent(out) :: flag,jcnnz
-
-        ! ARRAY ARGUMENTS
-        integer, intent(out) :: jcvar(lim)
-        real(kind=8), intent(in) :: x(n)
-        real(kind=8), intent(out) :: jcval(lim)
-
-        integer :: i
-
-        flag = 0
-        lmem = .false.
-
-        jcnnz = n
-
-        if ( jcnnz .gt. lim ) then
-            lmem = .true.
+      ! ARRAY ARGUMENTS
+      real(kind=8), intent(in) :: x(n)
+      real(kind=8), intent(out) :: g(n)
+      
+      ! This routine must compute the gradient of the objective
+      ! function.
+      
+      ! LOCAL SCALARS
+      type(pdata_type), pointer :: pdata
+      
+      call c_f_pointer(pdataptr,pdata)
+      pdata%counters(2) = pdata%counters(2) + 1
+      
+      g(1) = 4.0d0 * ( x(1) + 4.0d0 ) ** 3.0d0
+      g(2) = 2.0d0 * x(2)
+  
+    end subroutine evalg
+  
+    ! *****************************************************************
+    ! *****************************************************************
+  
+    subroutine evalc(n,x,m,p,c,inform,pdataptr)
+  
+      implicit none
+  
+      ! SCALAR ARGUMENTS
+      integer, intent(in) :: m,n,p
+      integer, intent(inout) :: inform
+      type(c_ptr), optional, intent(in) :: pdataptr
+  
+      ! ARRAY ARGUMENTS
+      real(kind=8), intent(in) :: x(n)
+      real(kind=8), intent(out) :: c(m+p)
+  
+      ! This routine must compute all the m+p constraints.
+      
+      ! LOCAL SCALARS
+      type(pdata_type), pointer :: pdata
+      
+      call c_f_pointer(pdataptr,pdata)
+      pdata%counters(3) = pdata%counters(3) + 1
+      
+      c(1) = x(1) ** 3.0d0 - x(2) - 1.0d0
+      
+    end subroutine evalc
+  
+    ! *****************************************************************
+    ! *****************************************************************
+  
+    subroutine evalj(n,x,m,p,ind,sorted,jsta,jlen,lim,jvar,jval,inform,pdataptr)
+  
+      implicit none
+      
+      ! SCALAR ARGUMENTS
+      integer, intent(in) :: lim,m,n,p
+      integer, intent(inout) :: inform
+      type(c_ptr), optional, intent(in) :: pdataptr
+  
+      ! ARRAY ARGUMENTS
+      logical, intent(in) :: ind(m+p)
+      real(kind=8), intent(in) :: x(n)
+      logical, intent(out) :: sorted(m+p)
+      integer, intent(out) :: jsta(m+p),jlen(m+p),jvar(lim)
+      real(kind=8), intent(out) :: jval(lim)
+      
+      ! This routine must compute the Jacobian of the constraints. In
+      ! fact, only gradients of constraints j such that ind(j) =
+      ! .true. need to be computed.
+      
+      ! LOCAL SCALARS
+      integer :: i
+      type(pdata_type), pointer :: pdata
+      
+      call c_f_pointer(pdataptr,pdata)
+      pdata%counters(4) = pdata%counters(4) + 1
+  
+      ! Only gradients of constraints j such that ind(j) = .true. need
+      ! to be computed.
+      
+      if ( ind(1) ) then
+         if ( lim .lt. n ) then
+            inform = -94
             return
-        end if
-
-        jcvar(1:n) = (/(i, i = 1, n)/)
-        jcval(1:n) = (/(grad(ind,i), i = 1, n-1), -1.0d0/)
-
-    end subroutine myevaljac
-
-    !******************************************************************************
-    ! HESSIAN OF THE CONSTRAINTS
-    !******************************************************************************
-    subroutine myevalhc(n,x,ind,hcrow,hccol,hcval,hcnnz,lim,lmem,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(out) :: lmem
-        integer, intent(in) :: ind,lim,n
-        integer, intent(out) :: flag,hcnnz
-
-        ! ARRAY ARGUMENTS
-        integer, intent(out) :: hccol(lim),hcrow(lim)
-        real(kind=8), intent(in) :: x(n)
-        real(kind=8), intent(out) :: hcval(lim)
-
-        flag = 0
-        lmem = .false.
-        hcnnz = 0
-
-    end subroutine myevalhc
-
-    ! ******************************************************************
-    ! ******************************************************************
-
-    subroutine myevalfc(n,x,f,m,c,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        integer, intent(in) :: m,n
-        integer, intent(out) :: flag
-        real(kind=8), intent(out) :: f
-
-        ! ARRAY ARGUMENTS
-        real(kind=8), intent(in) :: x(n)
-        real(kind=8), intent(out) :: c(m)
-
-        flag = - 1
-
-    end subroutine myevalfc
-
-    ! ******************************************************************
-    ! ******************************************************************
-
-    subroutine myevalgjac(n,x,g,m,jcfun,jcvar,jcval,jcnnz,lim,lmem,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(out) :: lmem
-        integer, intent(in) :: lim,m,n
-        integer, intent(out) :: flag,jcnnz
-
-        ! ARRAY ARGUMENTS
-        integer, intent(out) :: jcfun(lim),jcvar(lim)
-        real(kind=8), intent(in) :: x(n)
-        real(kind=8), intent(out) :: g(n),jcval(lim)
-
-        flag = - 1
-
-    end subroutine myevalgjac
-
-    ! ******************************************************************
-    ! ******************************************************************
-
-    subroutine myevalgjacp(n,x,g,m,p,q,work,gotj,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(inout) :: gotj
-        integer, intent(in) :: m,n
-        integer, intent(out) :: flag
-        character, intent(in) :: work
-
-        ! ARRAY ARGUMENTS
-        real(kind=8), intent(in) :: x(n)
-        real(kind=8), intent(inout) :: p(m),q(n)
-        real(kind=8), intent(out) :: g(n)
-
-        flag = - 1
-
-    end subroutine myevalgjacp
-
-    ! ******************************************************************
-    ! ******************************************************************
-
-    subroutine myevalhl(n,x,m,lambda,sf,sc,hlrow,hlcol,hlval,hlnnz,lim,lmem,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(out) :: lmem
-        integer, intent(in) :: lim,m,n
-        integer, intent(out) :: flag,hlnnz
-        real(kind=8), intent(in) :: sf
-
-        ! ARRAY ARGUMENTS
-        integer, intent(out) :: hlcol(lim),hlrow(lim)
-        real(kind=8), intent(in) :: lambda(m),sc(m),x(n)
-        real(kind=8), intent(out) :: hlval(lim)
-
-        flag = - 1
-
-    end subroutine myevalhl
-
-    ! ******************************************************************
-    ! ******************************************************************
-
-    subroutine myevalhlp(n,x,m,lambda,sf,sc,p,hp,goth,flag)
-
-        implicit none
-
-        ! SCALAR ARGUMENTS
-        logical, intent(inout) :: goth
-        integer, intent(in) :: m,n
-        integer, intent(out) :: flag
-        real(kind=8), intent(in) :: sf
-
-        ! ARRAY ARGUMENTS
-        real(kind=8), intent(in) :: lambda(m),p(n),sc(m),x(n)
-        real(kind=8), intent(out) :: hp(n)
-
-        flag = - 1
-
-    end subroutine myevalhlp
-end Program lovo
+         end if
+         
+         jsta(1) = 1
+         jlen(1) = n
+         
+         jvar(1:n) = (/ (i,i=1,n) /)
+  
+         jval(1) = 3.0d0 * x(1) ** 2.0d0
+         jval(2) = - 1.0d0
+  
+         ! Says whether the variables' indices in jvar (related to this
+         ! constraint) are in increasing order. In case they are,
+         ! Algencan takes advantage of this. Implement sorted gradients
+         ! of constraints if you can do this in a natural (cheap)
+         ! way. Under no circumnstance use a sorting algorithm. (It is
+         ! better to set sorted(1) = .false. in this case.)
+         
+         sorted(1) = .true.
+      end if
+      
+    end subroutine evalj
+  
+    ! *****************************************************************
+    ! *****************************************************************
+  
+    subroutine evalhl(n,x,m,p,lambda,lim,inclf,hlnnz,hlrow,hlcol,hlval,inform,pdataptr)
+  
+      implicit none
+      
+      ! SCALAR ARGUMENTS
+      logical, intent(in) :: inclf
+      integer, intent(in) :: m,n,lim,p
+      integer, intent(out) :: hlnnz
+      integer, intent(inout) :: inform
+      type(c_ptr), optional, intent(in) :: pdataptr
+  
+      ! ARRAY ARGUMENTS
+      real(kind=8), intent(in) :: lambda(m+p),x(n)
+      integer, intent(out) :: hlrow(lim),hlcol(lim)
+      real(kind=8), intent(out) :: hlval(lim)
+  
+      ! This routine must compute the Hessian of the Lagrangian. The
+      ! Hessian of the objective function must NOT be included if inclf
+      ! = .false.
+      
+      ! LOCAL SCALARS
+      type(pdata_type), pointer :: pdata
+      
+      call c_f_pointer(pdataptr,pdata)
+      pdata%counters(5) = pdata%counters(5) + 1
+  
+      hlnnz = 0
+  
+      ! If .not. inclf then the Hessian of the objective function must not be included
+      
+      if ( inclf ) then
+         if ( hlnnz + 2 .gt. lim ) then
+            inform = -95
+            return
+         end if
+      
+         hlnnz = hlnnz + 1
+         
+         hlrow(hlnnz) = 1
+         hlcol(hlnnz) = 1
+         hlval(hlnnz) = 12.0d0 * ( x(1) + 4.0d0 ) ** 2.0d0
+      
+         hlnnz = hlnnz + 1
+         
+         hlrow(hlnnz) = 2
+         hlcol(hlnnz) = 2
+         hlval(hlnnz) = 2.0d0
+      end if
+  
+      ! Note that entries of the Hessian of the Lagrangian can be
+      ! repeated. If this is case, them sum of repeated entrances is
+      ! considered. This feature simplifies the construction of the
+      ! Hessian of the Lagrangian.
+      
+      if ( hlnnz + 1 .gt. lim ) then
+         inform = -95
+         return
+      end if
+      
+      hlnnz = hlnnz + 1
+      
+      hlrow(hlnnz) = 1
+      hlcol(hlnnz) = 1
+      hlval(hlnnz) = lambda(1) * 6.0d0 * x(1)
+      
+    end subroutine evalhl
+  
+  end program lovo
