@@ -253,17 +253,22 @@ program lovo
         real(kind=8),   intent(out) :: train(rows,samples_train),validation(rows,samples_validation)    
         integer :: i,j,k
 
+        ! Mounting train and validation
         do i = 1, rows
+
             k = i
             do j = 1, samples_train
                 train(i,j) = y(k)
                 k = k + 1
             enddo
+
+            k = i
+            do j = 1, samples_validation
+                validation(i,j) = k + samples_train
+            enddo
         enddo
 
-        do i = rows - 10, rows
-            print*, train(i,1:5)
-        enddo
+
 
 
     end subroutine train_test_split
