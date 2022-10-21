@@ -52,8 +52,6 @@ program lovo
     samples_validation = 30
     rows= samples - (samples_train + samples_validation) + 1
 
-    print*, rows
-
     allocate(t(samples),y(samples),fmin_aux(samples),indices(samples),&
             train(rows,samples_train),validation(rows,samples_validation),stat=allocerr)
 
@@ -98,6 +96,7 @@ program lovo
     p = 1
 
     call compute_fmin(n,x,fmin_aux,fmin)
+    call train_test_split(samples_train,samples_validation,rows,train,validation)
 
   
     allocate(lambda(m+p),c(m+p),stat=allocerr)
@@ -251,7 +250,20 @@ program lovo
         implicit none
 
         integer,        intent(in) :: rows, samples_train, samples_validation
-        real(kind=8),   intent(out) :: train(rows,samples_train),validation(rows,samples_validation)        
+        real(kind=8),   intent(out) :: train(rows,samples_train),validation(rows,samples_validation)    
+        integer :: i,j,k
+
+        do i = 1, rows
+            k = i
+            do j = 1, samples_train
+                train(i,j) = y(k)
+                k = k + 1
+            enddo
+        enddo
+
+        do i = rows - 10, rows
+            print*, train(i,1:5)
+        enddo
 
 
     end subroutine train_test_split
