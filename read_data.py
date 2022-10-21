@@ -16,5 +16,3 @@ with open("output/data.txt","w") as f:
             f.write("%f\n" % 0.0)
         else:
             f.write("%f\n" % x)
-
-print
