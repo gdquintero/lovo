@@ -232,6 +232,21 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
+    subroutine fi(n,x,i,f)
+        implicit none
+
+        integer,        intent(in) :: n,i
+        real(kind=8),   intent(in) :: x(n)
+        real(kind=8),   intent(out):: f
+        
+        f = model(n,x,i,f) - y(i)
+        f = 0.5d0 * (f**2)
+
+    end subroutine fi
+
+    ! *****************************************************************
+    ! *****************************************************************
+
     subroutine model(n,x,i,f)
 
         implicit none 
