@@ -266,28 +266,28 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_fmin(x,n,faux,f)
+    subroutine compute_fmin(x,n,ind_train,faux,f)
 
         implicit none
 
         integer,        intent(in) :: n
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(inout) :: faux(samples)
+        real(kind=8),   intent(inout) :: faux(samples_train)
         real(kind=8),   intent(out) :: f
         integer :: i,kflag
 
-        faux = 0.0d0
+        faux(:) = 0.0d0
 
         kflag = 2
 
-        indices(:) = (/(i, i = 1, samples)/)
+        indices(:) = (/(i, i = 1, samples_train)/)
         
-        ! do i = 1, samples
-        !     call fi(n,x,i,faux(i))
-        ! end do
+        do i = 1, samples_train
+            call fi(x,n,i,ind_train,f)
+        end do
 
         ! Sorting
-        ! call DSORT(faux,indices,samples,kflag)
+        call DSORT(faux,indices,samples_train,kflag)
 
     end subroutine compute_fmin
 
