@@ -270,7 +270,7 @@ program lovo
 
         implicit none
 
-        integer,        intent(in) :: n
+        integer,        intent(in) :: n,ind_train
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(inout) :: faux(samples_train)
         real(kind=8),   intent(out) :: f
