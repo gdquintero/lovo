@@ -93,7 +93,7 @@ program lovo
     ! Number equality (m) and inequality (p) constraints.
     
     m = 0
-    p = 1
+    p = 0
 
     call compute_fmin(n,x,fmin_aux,fmin)
     call train_test_split(samples_train,samples_validation,rows,train,validation)
