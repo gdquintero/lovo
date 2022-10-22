@@ -5,20 +5,6 @@ program lovo
     use iso_c_binding, only: c_ptr, c_loc,c_f_pointer
   
     implicit none
-
-    ! LOVO Algorithm variables
-    integer :: i, rows
-    real(kind=8) :: fmin
-    real(kind=8), allocatable :: fmin_aux(:),indices(:),train(:,:),validation(:,:)
-
-
-    ! COMMON INTEGERS
-    integer :: samples,samples_train,samples_validation
-
-    ! COMMON ARRAYS
-    real(kind=8),   pointer :: t(:),y(:)
-
-    !--> End LOVO Algorithm variables <--
   
     ! Re-define this type (pdata_type) anyway you want. Algencan
     ! receives a pointer to a 'structure of this type'. Algencan has no
@@ -42,6 +28,17 @@ program lovo
     logical, allocatable :: lind(:),uind(:)
     real(kind=8), allocatable :: c(:),lbnd(:),ubnd(:),lambda(:),x(:)
 
+    !--> LOVO Algorithm variables <--
+    integer, pointer :: rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
+    real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
+    integer :: i
+    real(kind=8) :: fmin
+    real(kind=8), allocatable :: fmin_aux(:),indices(:)
+    
+
+    !--> End LOVO Algorithm variables <--
+
+    allocate(rows_train,samples,samples_train,samples_validation)
 
     ! Reading data and storing it in the variables t and y
     Open(Unit = 100, File = "output/data.txt", ACCESS = "SEQUENTIAL")
@@ -50,10 +47,10 @@ program lovo
 
     samples_train = 10
     samples_validation = 30
-    rows= samples - (samples_train + samples_validation) + 1
+    rows_train= samples - (samples_train + samples_validation) + 1
 
-    allocate(t(samples),y(samples),fmin_aux(samples),indices(samples),&
-            train(rows,samples_train),validation(rows,samples_validation),stat=allocerr)
+    allocate(t(samples_train),y(samples),fmin_aux(samples),indices(samples),&
+            train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error in main program'
@@ -62,8 +59,9 @@ program lovo
 
     do i = 1, samples
         read(100,*) y(i)
-        t(i) = i
     enddo
+
+    t(:) = (/(i, i = 1, samples_train)/)
 
     close(100)
 
@@ -94,11 +92,7 @@ program lovo
     
     m = 0
     p = 0
-
-    call compute_fmin(n,x,fmin_aux,fmin)
-    call train_test_split(samples_train,samples_validation,rows,train,validation)
-
-  
+    
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
     if ( allocerr .ne. 0 ) then
@@ -245,16 +239,14 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine train_test_split(samples_train,samples_validation,rows,train,validation)
+    subroutine train_test_split()
 
         implicit none
-
-        integer,        intent(in) :: rows, samples_train, samples_validation
-        real(kind=8),   intent(out) :: train(rows,samples_train),validation(rows,samples_validation)    
+  
         integer :: i,j,k
 
         ! Mounting train and validation matrices
-        do i = 1, rows
+        do i = 1, rows_train
 
             k = i
             do j = 1, samples_train
@@ -274,7 +266,7 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_fmin(n,x,faux,f)
+    subroutine compute_fmin(x,n,faux,f)
 
         implicit none
 
@@ -290,46 +282,46 @@ program lovo
 
         indices(:) = (/(i, i = 1, samples)/)
         
-        do i = 1, samples
-            call fi(n,x,i,faux(i))
-        end do
+        ! do i = 1, samples
+        !     call fi(n,x,i,faux(i))
+        ! end do
 
         ! Sorting
-        call DSORT(faux,indices,samples,kflag)
+        ! call DSORT(faux,indices,samples,kflag)
 
     end subroutine compute_fmin
 
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine fi(n,x,i,f)
+    subroutine fi(x,n,i,ind_train,f)
 
         implicit none
 
-        integer,        intent(in) :: n,i
+        integer,        intent(in) :: n,i,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out) :: f
+        real(kind=8),   intent(out) :: f   
         
-        call model(n,x,i,f)
-        f = 0.5d0 * ((f - y(i))**2)
+        call model(x,n,i,ind_train,f)
+        f = 0.5d0 * ((f - train(ind_train,i))**2)
 
     end subroutine fi
 
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine model(n,x,i,f)
+    subroutine model(x,n,i,ind_train,f)
 
         implicit none 
 
-        integer,        intent(in) :: n,i
+        integer,        intent(in) :: n,i,ind_train
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: f   
 
-        f = y(samples) + &
-            x(1) * (t(i) - t(samples)) + &
-            x(2) * (t(i) - t(samples))**2 + &
-            x(3) * (t(i) - t(samples))**3
+        f = train(ind_train,samples_train) + &
+            x(1) * (t(i) - t(samples_train)) + &
+            x(2) * (t(i) - t(samples_train))**2 + &
+            x(3) * (t(i) - t(samples_train))**3
         
     end subroutine model
 
