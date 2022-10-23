@@ -98,7 +98,9 @@ program lovo
     m = 0
     p = 0
 
-    ind_train = 100
+    ind_train = 1
+
+    call train_test_split()
 
     call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
 
