@@ -31,7 +31,7 @@ program lovo
     !--> LOVO Algorithm variables <--
     integer, pointer :: rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
-    integer :: i
+    integer :: i,ind_train
     real(kind=8) :: fmin
     real(kind=8), allocatable :: fmin_aux(:),indices(:)
     
@@ -92,6 +92,10 @@ program lovo
     
     m = 0
     p = 0
+
+    ind_train = 1
+
+    call compute_fmin(x,n,ind_train,fmin_aux,f)
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -266,13 +270,13 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_fmin(x,n,ind_train,faux,f)
+    subroutine compute_fmin(x,n,ind_train,fmin_aux,f)
 
         implicit none
 
         integer,        intent(in) :: n,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(inout) :: faux(samples_train)
+        real(kind=8),   intent(inout) :: fmin_aux(samples_train)
         real(kind=8),   intent(out) :: f
         integer :: i,kflag
 
