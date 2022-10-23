@@ -30,17 +30,18 @@ program lovo
 
     !--> LOVO Algorithm variables <--
 
-    integer, pointer :: order_lovo => null(),rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
+    integer, pointer :: samples=>null(),samples_train=>null(),samples_validation=>null()
+    integer, pointer :: r_comb=>null(),order_lovo=>null(),rows_train=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
     real(kind=8) :: Fmin
-    real(kind=8), allocatable :: Fmin_aux(:),Fi_aux(:),indices(:)
+    real(kind=8), allocatable :: Fmin_aux(:),indices(:)
     integer, allocatable :: Imin(:),combi(:)
-    integer :: i,ind_train,n_Imin
+    integer :: i,ind_train,n_Imin,i4_choose
     
 
     !--> End LOVO Algorithm variables <--
 
-    allocate(order_lovo,rows_train,samples,samples_train,samples_validation)
+    allocate(order_lovo,rows_train,samples,samples_train,samples_validation,r_comb)
 
     ! Reading data and storing it in the variables t and y
     Open(Unit = 100, File = "output/data.txt", ACCESS = "SEQUENTIAL")
@@ -51,8 +52,9 @@ program lovo
     samples_validation = 30
     rows_train = samples - (samples_train + samples_validation) + 1
     order_lovo = samples_train - 2
+    r_comb = i4_choose(samples_train,order_lovo)
 
-    allocate(t(samples_train),y(samples),Fmin_aux(samples),Fi_aux(order_lovo),indices(samples),Imin(samples_train),&
+    allocate(t(samples_train),y(samples),Fmin_aux(samples),indices(samples),Imin(r_comb),&
             combi(order_lovo),train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
@@ -100,8 +102,9 @@ program lovo
 
     call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
 
-    call mount_Imin(x,n,Fmin,ind_train,Fi_aux,combi,Imin,n_Imin)
+    call mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
 
+    print*, Imin(1:n_Imin)
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -276,25 +279,32 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine mount_Imin(x,n,Fmin,ind_train,Fi_aux,combi,Imin,n_Imin)
+    subroutine mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
 
         implicit none
 
         integer,        intent(in) :: ind_train,n
         real(kind=8),   intent(in) :: Fmin,x(n)
-        real(kind=8),   intent(inout) :: Fi_aux(order_lovo)
         integer,        intent(inout) :: combi(order_lovo)
-        integer,        intent(out) :: n_Imin,Imin(samples_train)
-        integer :: r_comb,i4_choose,i,j
+        integer,        intent(out) :: n_Imin,Imin(r_comb)
+        integer :: i,j
+        real(kind=8) :: F_i,Fi_aux
 
-        r_comb = i4_choose(samples_train,order_lovo)
+        n_Imin = 0
 
         do i = 1, r_comb
             call comb_unrank(samples_train,order_lovo,i,combi)
-
+            
+            F_i = 0.0d0
             do j = 1, order_lovo
-                call fi(x,n,combi(j),ind_train,Fi_aux(j))
+                call fi(x,n,combi(j),ind_train,Fi_aux)
+                F_i = F_i + Fi_aux
             enddo
+
+            if (F_i .eq. Fmin) then
+                Imin(n_Imin + 1) = i
+                n_Imin = n_Imin + 1
+            endif
         enddo
 
     end subroutine mount_Imin
@@ -325,7 +335,7 @@ program lovo
         ! Sorting
         call DSORT(Fmin_aux,indices,samples_train,kflag)
 
-        f = Fmin_aux(order_lovo)
+        f = sum(Fmin_aux(1:order_lovo))
 
     end subroutine compute_Fmin
 
