@@ -29,11 +29,13 @@ program lovo
     real(kind=8), allocatable :: c(:),lbnd(:),ubnd(:),lambda(:),x(:)
 
     !--> LOVO Algorithm variables <--
+
     integer, pointer :: order_lovo => null(),rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
     real(kind=8) :: fmin
     real(kind=8), allocatable :: fmin_aux(:),indices(:)
-    integer :: i,ind_train
+    integer, allocatable :: Imin(:),combi(:)
+    integer :: i,ind_train,n_Imin
     
 
     !--> End LOVO Algorithm variables <--
@@ -50,7 +52,7 @@ program lovo
     rows_train = samples - (samples_train + samples_validation) + 1
     order_lovo = samples_train - 2
 
-    allocate(t(samples_train),y(samples),fmin_aux(samples),indices(samples),&
+    allocate(t(samples_train),y(samples),fmin_aux(samples),indices(samples),Imin(samples_train),combi(order_lovo),&
             train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
@@ -97,6 +99,8 @@ program lovo
     ind_train = 1
 
     call compute_fmin(x,n,ind_train,fmin_aux,fmin)
+
+    call mount_Imin(fmin,combi,Imin,n_Imin)
 
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
@@ -272,11 +276,21 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine mount_Imin()
+    subroutine mount_Imin(fmin,combi,Imin,n_Imin)
 
         implicit none
 
-        
+        real(kind=8),   intent(in) :: fmin
+        integer,        intent(inout) :: combi(order_lovo)
+        integer,        intent(out) :: n_Imin,Imin(samples_train)
+        integer :: r_comb,i4_choose,i
+
+        r_comb = i4_choose(samples_train,order_lovo)
+
+        do i = 1, r_comb
+            call comb_unrank (samples_train,order_lovo,i,combi)
+            print*, combi(:)
+        enddo
 
     end subroutine mount_Imin
 
