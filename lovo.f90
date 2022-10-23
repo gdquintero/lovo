@@ -34,7 +34,7 @@ program lovo
     integer, pointer :: r_comb=>null(),order_lovo=>null(),rows_train=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
     real(kind=8) :: Fmin
-    real(kind=8), allocatable :: Fmin_aux(:),indices(:),grad_Fi(:)
+    real(kind=8), allocatable :: Fmin_aux(:),indices(:),grad_Fi(:),hess_Fi(:,:)
     integer, allocatable :: Imin(:),combi(:)
     integer :: i,ind_train,n_Imin,i4_choose
     
@@ -77,7 +77,7 @@ program lovo
   
     n = 3
 
-    allocate(grad_Fi(n),stat=allocerr)
+    allocate(grad_Fi(n),hess_Fi(n,n),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error.'
@@ -116,7 +116,12 @@ program lovo
 
     call compute_grad_Fi(x,n,Imin(1),combi,grad_Fi)
 
-    print*, grad_Fi
+    call compute_hess_Fi(n,Imin(1),combi,hess_Fi)
+
+    do i = 1, n
+        print*, hess_Fi(i,:)
+    enddo
+
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -355,9 +360,26 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_hess_Fi()
+    subroutine compute_hess_Fi(n,ind_Ci,combi,hess_Fi)
 
         implicit none
+
+        integer,        intent(in) :: ind_Ci,n
+        integer,        intent(inout) :: combi(order_lovo)
+        real(kind=8),   intent(out) :: hess_Fi(n,n)
+        integer :: i,j,k
+
+        call comb_unrank(samples_train,order_lovo,ind_Ci,combi)
+
+        hess_Fi(:,:) = 0.0d0
+
+        do k = 1, order_lovo
+            do i = 1, n
+                do j = 1, n
+                    hess_Fi(i,j) = hess_Fi(i,j) + (t(combi(k)) - t(samples_train))**(i + j)
+                enddo
+            enddo
+        enddo
 
     end subroutine compute_hess_Fi
 
