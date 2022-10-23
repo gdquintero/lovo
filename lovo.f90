@@ -98,13 +98,13 @@ program lovo
     m = 0
     p = 0
 
-    ind_train = 1
+    ind_train = 100
 
     call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
 
     call mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
 
-    print*, Imin(1:n_Imin)
+    print*, Fmin
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
