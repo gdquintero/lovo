@@ -32,8 +32,8 @@ program lovo
 
     integer, pointer :: order_lovo => null(),rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
-    real(kind=8) :: fmin
-    real(kind=8), allocatable :: fmin_aux(:),indices(:)
+    real(kind=8) :: Fmin
+    real(kind=8), allocatable :: Fmin_aux(:),Fi_aux(:),indices(:)
     integer, allocatable :: Imin(:),combi(:)
     integer :: i,ind_train,n_Imin
     
@@ -52,8 +52,8 @@ program lovo
     rows_train = samples - (samples_train + samples_validation) + 1
     order_lovo = samples_train - 2
 
-    allocate(t(samples_train),y(samples),fmin_aux(samples),indices(samples),Imin(samples_train),combi(order_lovo),&
-            train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
+    allocate(t(samples_train),y(samples),Fmin_aux(samples),Fi_aux(order_lovo),indices(samples),Imin(samples_train),&
+            combi(order_lovo),train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error in main program'
@@ -98,9 +98,9 @@ program lovo
 
     ind_train = 1
 
-    call compute_fmin(x,n,ind_train,fmin_aux,fmin)
+    call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
 
-    call mount_Imin(fmin,combi,Imin,n_Imin)
+    call mount_Imin(x,n,Fmin,ind_train,Fi_aux,combi,Imin,n_Imin)
 
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
@@ -276,20 +276,25 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine mount_Imin(fmin,combi,Imin,n_Imin)
+    subroutine mount_Imin(x,n,Fmin,ind_train,Fi_aux,combi,Imin,n_Imin)
 
         implicit none
 
-        real(kind=8),   intent(in) :: fmin
+        integer,        intent(in) :: ind_train,n
+        real(kind=8),   intent(in) :: Fmin,x(n)
+        real(kind=8),   intent(inout) :: Fi_aux(order_lovo)
         integer,        intent(inout) :: combi(order_lovo)
         integer,        intent(out) :: n_Imin,Imin(samples_train)
-        integer :: r_comb,i4_choose,i
+        integer :: r_comb,i4_choose,i,j
 
         r_comb = i4_choose(samples_train,order_lovo)
 
         do i = 1, r_comb
-            call comb_unrank (samples_train,order_lovo,i,combi)
-            print*, combi(:)
+            call comb_unrank(samples_train,order_lovo,i,combi)
+
+            do j = 1, order_lovo
+                call fi(x,n,combi(j),ind_train,Fi_aux(j))
+            enddo
         enddo
 
     end subroutine mount_Imin
@@ -297,32 +302,32 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_fmin(x,n,ind_train,fmin_aux,f)
+    subroutine compute_Fmin(x,n,ind_train,Fmin_aux,f)
 
         implicit none
 
         integer,        intent(in) :: n,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(inout) :: fmin_aux(samples_train)
+        real(kind=8),   intent(inout) :: Fmin_aux(samples_train)
         real(kind=8),   intent(out) :: f
         integer :: i,kflag
 
-        fmin_aux(:) = 0.0d0
+        Fmin_aux(:) = 0.0d0
 
         kflag = 2
 
         indices(:) = (/(i, i = 1, samples_train)/)
         
         do i = 1, samples_train
-            call fi(x,n,i,ind_train,fmin_aux(i))
+            call fi(x,n,i,ind_train,Fmin_aux(i))
         end do
 
         ! Sorting
-        call DSORT(fmin_aux,indices,samples_train,kflag)
+        call DSORT(Fmin_aux,indices,samples_train,kflag)
 
-        f = fmin_aux(order_lovo)
+        f = Fmin_aux(order_lovo)
 
-    end subroutine compute_fmin
+    end subroutine compute_Fmin
 
     ! *****************************************************************
     ! *****************************************************************
