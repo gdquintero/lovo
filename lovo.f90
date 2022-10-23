@@ -29,16 +29,16 @@ program lovo
     real(kind=8), allocatable :: c(:),lbnd(:),ubnd(:),lambda(:),x(:)
 
     !--> LOVO Algorithm variables <--
-    integer, pointer :: rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
+    integer, pointer :: order_lovo => null(),rows_train=>null(),samples=>null(),samples_train=>null(),samples_validation=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
-    integer :: i,ind_train
     real(kind=8) :: fmin
     real(kind=8), allocatable :: fmin_aux(:),indices(:)
+    integer :: i,ind_train
     
 
     !--> End LOVO Algorithm variables <--
 
-    allocate(rows_train,samples,samples_train,samples_validation)
+    allocate(order_lovo,rows_train,samples,samples_train,samples_validation)
 
     ! Reading data and storing it in the variables t and y
     Open(Unit = 100, File = "output/data.txt", ACCESS = "SEQUENTIAL")
@@ -47,7 +47,8 @@ program lovo
 
     samples_train = 10
     samples_validation = 30
-    rows_train= samples - (samples_train + samples_validation) + 1
+    rows_train = samples - (samples_train + samples_validation) + 1
+    order_lovo = samples_train - 2
 
     allocate(t(samples_train),y(samples),fmin_aux(samples),indices(samples),&
             train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
@@ -95,7 +96,9 @@ program lovo
 
     ind_train = 1
 
-    call compute_fmin(x,n,ind_train,fmin_aux,f)
+    call compute_fmin(x,n,ind_train,fmin_aux,fmin)
+
+    print*, fmin
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -280,18 +283,20 @@ program lovo
         real(kind=8),   intent(out) :: f
         integer :: i,kflag
 
-        faux(:) = 0.0d0
+        fmin_aux(:) = 0.0d0
 
         kflag = 2
 
         indices(:) = (/(i, i = 1, samples_train)/)
         
         do i = 1, samples_train
-            call fi(x,n,i,ind_train,f)
+            call fi(x,n,i,ind_train,fmin_aux(i))
         end do
 
         ! Sorting
-        call DSORT(faux,indices,samples_train,kflag)
+        call DSORT(fmin_aux,indices,samples_train,kflag)
+
+        f = fmin_aux(order_lovo)
 
     end subroutine compute_fmin
 
