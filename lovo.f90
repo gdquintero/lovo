@@ -312,13 +312,17 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_grad_Fi(x,n,ind_grad,grad_Fi)
+    subroutine compute_grad_Fi(x,n,C_i,combi,grad_Fi)
         
         implicit none
 
-        integer,        intent(in) :: ind_grad,n
+        integer,        intent(in) :: C_i,n
         real(kind=8),   intent(in) :: x(n)
+        integer,        intent(inout) :: combi(order_lovo)
         real(kind=8),   intent(out) :: grad_Fi(n)
+        real(kind=8) :: zi
+
+
 
     end subroutine compute_grad_Fi
 
