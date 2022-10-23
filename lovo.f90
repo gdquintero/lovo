@@ -34,7 +34,7 @@ program lovo
     integer, pointer :: r_comb=>null(),order_lovo=>null(),rows_train=>null()
     real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
     real(kind=8) :: Fmin
-    real(kind=8), allocatable :: Fmin_aux(:),indices(:)
+    real(kind=8), allocatable :: Fmin_aux(:),indices(:),grad_Fi(:)
     integer, allocatable :: Imin(:),combi(:)
     integer :: i,ind_train,n_Imin,i4_choose
     
@@ -54,8 +54,9 @@ program lovo
     order_lovo = samples_train - 2
     r_comb = i4_choose(samples_train,order_lovo)
 
-    allocate(t(samples_train),y(samples),Fmin_aux(samples),indices(samples),Imin(r_comb),&
-            combi(order_lovo),train(rows_train,samples_train),validation(rows_train,samples_validation),stat=allocerr)
+    allocate(t(samples_train),y(samples),Fmin_aux(samples),indices(samples),&
+            Imin(r_comb),combi(order_lovo),train(rows_train,samples_train),&
+            validation(rows_train,samples_validation),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error in main program'
@@ -75,6 +76,13 @@ program lovo
     ! Number of variables
   
     n = 3
+
+    allocate(grad_Fi(n),stat=allocerr)
+
+    if ( allocerr .ne. 0 ) then
+        write(*,*) 'Allocation error.'
+        stop
+     end if
     
     allocate(x(n),lind(n),lbnd(n),uind(n),ubnd(n),stat=allocerr)
   
@@ -105,6 +113,10 @@ program lovo
     call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
 
     call mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
+
+    call compute_grad_Fi(x,n,Imin(1),combi,grad_Fi)
+
+    print*, grad_Fi
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -312,17 +324,31 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_grad_Fi(x,n,C_i,combi,grad_Fi)
+    subroutine compute_grad_Fi(x,n,ind_Ci,combi,grad_Fi)
         
         implicit none
 
-        integer,        intent(in) :: C_i,n
+        integer,        intent(in) :: ind_Ci,n
         real(kind=8),   intent(in) :: x(n)
         integer,        intent(inout) :: combi(order_lovo)
         real(kind=8),   intent(out) :: grad_Fi(n)
         real(kind=8) :: zi
+        integer :: i,j
 
+        call comb_unrank(samples_train,order_lovo,ind_Ci,combi)
+        
+        zi = 0.0d0
+        grad_Fi(:) = 0.0d0
 
+        do i = 1, order_lovo
+            call model(x,n,combi(i),ind_train,zi)
+            zi = zi - train(ind_train,combi(i))
+
+            do j = 1, n
+                grad_Fi(j) = grad_Fi(j) + zi * ((t(combi(i)) - t(samples_train))**j)
+            enddo
+
+        enddo
 
     end subroutine compute_grad_Fi
 
