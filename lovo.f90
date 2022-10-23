@@ -105,8 +105,6 @@ program lovo
     call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
 
     call mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
-
-    print*, Fmin
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -240,7 +238,7 @@ program lovo
     ! ! *****************************************************************
     
     ! deallocate(lind,lbnd,uind,ubnd,x,lambda,c,stat=allocerr)
-    
+    ind_train = 100
     ! if ( allocerr .ne. 0 ) then
     !    write(*,*) 'Deallocation error.'
     !    stop
@@ -310,6 +308,19 @@ program lovo
         enddo
 
     end subroutine mount_Imin
+
+    ! *****************************************************************
+    ! *****************************************************************
+
+    subroutine compute_grad_Fi(x,n,ind_grad,grad_Fi)
+        
+        implicit none
+
+        integer,        intent(in) :: ind_grad,n
+        real(kind=8),   intent(in) :: x(n)
+        real(kind=8),   intent(out) :: grad_Fi(n)
+
+    end subroutine compute_grad_Fi
 
     ! *****************************************************************
     ! *****************************************************************
