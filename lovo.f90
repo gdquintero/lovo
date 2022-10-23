@@ -98,7 +98,6 @@ program lovo
 
     call compute_fmin(x,n,ind_train,fmin_aux,fmin)
 
-    print*, fmin
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -269,6 +268,17 @@ program lovo
         enddo
 
     end subroutine train_test_split
+
+    ! *****************************************************************
+    ! *****************************************************************
+
+    subroutine mount_Imin()
+
+        implicit none
+
+        
+
+    end subroutine mount_Imin
 
     ! *****************************************************************
     ! *****************************************************************
