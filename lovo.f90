@@ -314,14 +314,14 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_Fmin(x,n,ind_train,Fmin_aux,f)
+    subroutine compute_Fmin(x,n,ind_train,Fmin_aux,fun)
 
         implicit none
 
         integer,        intent(in) :: n,ind_train
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(inout) :: Fmin_aux(samples_train)
-        real(kind=8),   intent(out) :: f
+        real(kind=8),   intent(out) :: fun
         integer :: i,kflag
 
         Fmin_aux(:) = 0.0d0
@@ -338,38 +338,38 @@ program lovo
         call DSORT(Fmin_aux,indices,samples_train,kflag)
 
         ! Lovo function 
-        f = sum(Fmin_aux(1:order_lovo))
+        fun = sum(Fmin_aux(1:order_lovo))
 
     end subroutine compute_Fmin
 
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine fi(x,n,i,ind_train,f)
+    subroutine fi(x,n,i,ind_train,fun)
 
         implicit none
 
         integer,        intent(in) :: n,i,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out) :: f   
+        real(kind=8),   intent(out) :: fun   
         
-        call model(x,n,i,ind_train,f)
-        f = 0.5d0 * ((f - train(ind_train,i))**2)
+        call model(x,n,i,ind_train,fun)
+        fun = 0.5d0 * ((fun - train(ind_train,i))**2)
 
     end subroutine fi
 
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine model(x,n,i,ind_train,f)
+    subroutine model(x,n,i,ind_train,fun)
 
         implicit none 
 
         integer,        intent(in) :: n,i,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out) :: f   
+        real(kind=8),   intent(out) :: fun
 
-        f = train(ind_train,samples_train) + &
+        fun = train(ind_train,samples_train) + &
             x(1) * (t(i) - t(samples_train)) + &
             x(2) * (t(i) - t(samples_train))**2 + &
             x(3) * (t(i) - t(samples_train))**3
