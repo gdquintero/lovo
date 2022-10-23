@@ -335,6 +335,7 @@ program lovo
         ! Sorting
         call DSORT(Fmin_aux,indices,samples_train,kflag)
 
+        ! Lovo function 
         f = sum(Fmin_aux(1:order_lovo))
 
     end subroutine compute_Fmin
