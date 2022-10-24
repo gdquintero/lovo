@@ -237,7 +237,9 @@ program lovo
     !    stop
     ! end if
 
-    call lovo_algorithm()
+    ind_train = 1
+
+    call lovo_algorithm(ind_train)
     stop
   
     contains  
@@ -245,13 +247,13 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine lovo_algorithm()
+    subroutine lovo_algorithm(ind_train)
 
         implicit none
 
-        xk(:) = 1.0d0
+        integer,        intent(in) :: ind_train
 
-        ind_train = 1
+        xk(:) = 1.0d0
 
         Fmin = compute_Fmin(xk,n,ind_train)
 
@@ -259,7 +261,7 @@ program lovo
 
         nuk = Imin(n_Imin)
 
-        x(1:n) = 1.0d0
+        x(1:n) = xk(1:n)
 
         sigma = sigmin
 
@@ -267,6 +269,8 @@ program lovo
             n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
             scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
             outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
+
+        print*, x
 
 
     end subroutine lovo_algorithm
