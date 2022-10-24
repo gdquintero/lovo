@@ -30,18 +30,14 @@ program lovo
 
     !--> LOVO Algorithm variables <--
 
-    integer, pointer :: samples=>null(),samples_train=>null(),samples_validation=>null()
-    integer, pointer :: r_comb=>null(),order_lovo=>null(),rows_train=>null()
-    real(kind=8), pointer :: t(:)=>null(),y(:)=>null(),train(:,:)=>null(),validation(:,:)=>null()
-    real(kind=8) :: Fmin
-    real(kind=8), allocatable :: Fmin_aux(:),indices(:),grad_Fi(:),hess_Fi(:,:)
+    integer :: samples,samples_train,samples_validation,r_comb,order_lovo,rows_train,i,ind_train,n_Imin,i4_choose
     integer, allocatable :: Imin(:),combi(:)
-    integer :: i,ind_train,n_Imin,i4_choose
+    real(kind=8), allocatable :: xk(:),t(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),indices(:),grad_Fi(:),hess_Fi(:,:)
+    real(kind=8) :: Fmin,sigma
+    real(kind=8), parameter :: sigmin = 1.d0
     
 
     !--> End LOVO Algorithm variables <--
-
-    allocate(order_lovo,rows_train,samples,samples_train,samples_validation,r_comb)
 
     ! Reading data and storing it in the variables t and y
     Open(Unit = 100, File = "output/data.txt", ACCESS = "SEQUENTIAL")
@@ -77,7 +73,7 @@ program lovo
   
     n = 3
 
-    allocate(grad_Fi(n),hess_Fi(n,n),stat=allocerr)
+    allocate(xk(n),grad_Fi(n),hess_Fi(n,n),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error.'
@@ -90,6 +86,8 @@ program lovo
        write(*,*) 'Allocation error.'
        stop
     end if
+
+    xk(:) = 0.0d0
   
     ! Initial guess and bound constraints
     
@@ -109,19 +107,6 @@ program lovo
     ind_train = 1
 
     call train_test_split()
-
-    call compute_Fmin(x,n,ind_train,Fmin_aux,Fmin)
-
-    call mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
-
-    call compute_grad_Fi(x,n,Imin(1),combi,grad_Fi)
-
-    call compute_hess_Fi(n,Imin(1),combi,hess_Fi)
-
-    do i = 1, n
-        print*, hess_Fi(i,:)
-    enddo
-
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
   
@@ -296,6 +281,23 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
+    function Regularized_Taylor(x,n,ind_train,nuk,sigma) result (res)
+
+        implicit none
+
+        integer,        intent(in) :: n,nuk,ind_train
+        real(kind=8),   intent(in) :: x(n),sigma
+        real(kind=8) :: res
+
+        res = compute_Fmin(x,n,ind_train)
+        res = res + dot_product(compute_grad_Fi(x,n,nuk),x(1:n) - xk(1:n))
+        res = res + 0.5d0 * sigma * (norm2(x(1:n) - xk(1:n))**2)
+
+    end function Regularized_Taylor
+
+    ! *****************************************************************
+    ! *****************************************************************
+
     subroutine mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
 
         implicit none
@@ -329,71 +331,70 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_grad_Fi(x,n,ind_Ci,combi,grad_Fi)
+    function compute_grad_Fi(x,n,ind_Ci) result (res)
         
         implicit none
 
         integer,        intent(in) :: ind_Ci,n
         real(kind=8),   intent(in) :: x(n)
-        integer,        intent(inout) :: combi(order_lovo)
-        real(kind=8),   intent(out) :: grad_Fi(n)
-        real(kind=8) :: zi
+        real(kind=8) :: res(n),zi
         integer :: i,j
+
+        combi(:) = 0
 
         call comb_unrank(samples_train,order_lovo,ind_Ci,combi)
         
         zi = 0.0d0
-        grad_Fi(:) = 0.0d0
+        res(:) = 0.0d0
 
         do i = 1, order_lovo
             call model(x,n,combi(i),ind_train,zi)
             zi = zi - train(ind_train,combi(i))
 
             do j = 1, n
-                grad_Fi(j) = grad_Fi(j) + zi * ((t(combi(i)) - t(samples_train))**j)
+                res(j) = res(j) + zi * ((t(combi(i)) - t(samples_train))**j)
             enddo
 
         enddo
 
-    end subroutine compute_grad_Fi
+    end function compute_grad_Fi
 
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_hess_Fi(n,ind_Ci,combi,hess_Fi)
+    function compute_hess_Fi(n,ind_Ci,combi) result (res)
 
         implicit none
 
         integer,        intent(in) :: ind_Ci,n
         integer,        intent(inout) :: combi(order_lovo)
-        real(kind=8),   intent(out) :: hess_Fi(n,n)
+        real(kind=8) :: res(n,n)
         integer :: i,j,k
 
         call comb_unrank(samples_train,order_lovo,ind_Ci,combi)
 
-        hess_Fi(:,:) = 0.0d0
+        res(:,:) = 0.0d0
 
         do k = 1, order_lovo
             do i = 1, n
                 do j = 1, n
-                    hess_Fi(i,j) = hess_Fi(i,j) + (t(combi(k)) - t(samples_train))**(i + j)
+                    res(i,j) = res(i,j) + (t(combi(k)) - t(samples_train))**(i + j)
                 enddo
             enddo
         enddo
 
-    end subroutine compute_hess_Fi
+    end function compute_hess_Fi
 
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_Fmin(x,n,ind_train,Fmin_aux,fun)
+    function compute_Fmin(x,n,ind_train) result (res)
 
         implicit none
 
         integer,        intent(in) :: n,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(inout) :: Fmin_aux(samples_train)
-        real(kind=8),   intent(out) :: fun
+        real(kind=8) :: res
         integer :: i,kflag
 
         Fmin_aux(:) = 0.0d0
@@ -410,9 +411,9 @@ program lovo
         call DSORT(Fmin_aux,indices,samples_train,kflag)
 
         ! Lovo function 
-        fun = sum(Fmin_aux(1:order_lovo))
+        res = sum(Fmin_aux(1:order_lovo))
 
-    end subroutine compute_Fmin
+    end function compute_Fmin
 
     ! *****************************************************************
     ! *****************************************************************
@@ -472,7 +473,7 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(1) = pdata%counters(1) + 1
         
-        f = ( x(1) + 4.0d0 ) ** 4.0d0 + x(2) ** 2.0d0
+        f = Regularized_Taylor(x,n,ind_train,nuk,sigma)
         
     end subroutine evalf
 
