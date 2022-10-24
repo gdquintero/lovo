@@ -30,12 +30,11 @@ program lovo
 
     !--> LOVO Algorithm variables <--
 
-    integer :: samples,samples_train,samples_validation,r_comb,order_lovo,rows_train,i,ind_train,n_Imin,i4_choose
+    integer :: samples,samples_train,samples_validation,r_comb,order_lovo,rows_train,i,ind_train,n_Imin,i4_choose,nuk
     integer, allocatable :: Imin(:),combi(:)
     real(kind=8), allocatable :: xk(:),t(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),indices(:),grad_Fi(:),hess_Fi(:,:)
     real(kind=8) :: Fmin,sigma
     real(kind=8), parameter :: sigmin = 1.d0
-    
 
     !--> End LOVO Algorithm variables <--
 
@@ -84,12 +83,8 @@ program lovo
        write(*,*) 'Allocation error.'
        stop
     end if
-
-    xk(:) = 0.0d0
   
     ! Initial guess and bound constraints
-    
-    x(1:n) = 1.0d0
   
     lind(1:n) = .false.
     ! lbnd(1:n) = - 100.0d0
@@ -101,8 +96,6 @@ program lovo
     
     m = 0
     p = 0
-
-    ind_train = 1
 
     call train_test_split()
     
@@ -238,16 +231,46 @@ program lovo
     ! ! *****************************************************************
     
     ! deallocate(lind,lbnd,uind,ubnd,x,lambda,c,stat=allocerr)
-    ind_train = 100
+
     ! if ( allocerr .ne. 0 ) then
     !    write(*,*) 'Deallocation error.'
     !    stop
     ! end if
 
-
+    call lovo_algorithm()
     stop
   
     contains  
+
+    ! *****************************************************************
+    ! *****************************************************************
+
+    subroutine lovo_algorithm()
+
+        implicit none
+
+        xk(:) = 1.0d0
+
+        ind_train = 1
+
+        Fmin = compute_Fmin(xk,n,ind_train)
+
+        call mount_Imin(xk,n,Fmin,ind_train,combi,Imin,n_Imin)
+
+        nuk = Imin(n_Imin)
+
+        x(1:n) = 1.0d0
+
+        sigma = sigmin
+
+        call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
+            n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
+            scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
+            outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
+
+
+    end subroutine lovo_algorithm
+
 
     ! *****************************************************************
     ! *****************************************************************
@@ -308,6 +331,7 @@ program lovo
         real(kind=8) :: F_i,Fi_aux
 
         n_Imin = 0
+
 
         do i = 1, r_comb
             call comb_unrank(samples_train,order_lovo,i,combi)
@@ -471,9 +495,7 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(1) = pdata%counters(1) + 1
         
-        ! f = Regularized_Taylor(x,n,ind_train,nuk,sigma)
-
-        f = 0
+        f = Regularized_Taylor(x,n,ind_train,nuk,sigma)
         
     end subroutine evalf
 
@@ -502,8 +524,7 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(2) = pdata%counters(2) + 1
         
-        g(1) = 4.0d0 * ( x(1) + 4.0d0 ) ** 3.0d0
-        g(2) = 2.0d0 * x(2)
+        g(:) = compute_grad_Fi(x,n,nuk) + sigma * (x(1:n) - xk(1:n))
 
     end subroutine evalg
 
@@ -531,7 +552,7 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(3) = pdata%counters(3) + 1
         
-        c(1) = x(1) ** 3.0d0 - x(2) - 1.0d0
+        ! c(1) = x(1) ** 3.0d0 - x(2) - 1.0d0
         
     end subroutine evalc
 
@@ -562,35 +583,6 @@ program lovo
         integer :: i
         type(pdata_type), pointer :: pdata
         
-        call c_f_pointer(pdataptr,pdata)
-        pdata%counters(4) = pdata%counters(4) + 1
-
-        ! Only gradients of constraints j such that ind(j) = .true. need
-        ! to be computed.
-        
-        if ( ind(1) ) then
-            if ( lim .lt. n ) then
-            inform = -94
-            return
-            end if
-            
-            jsta(1) = 1
-            jlen(1) = n
-            
-            jvar(1:n) = (/ (i,i=1,n) /)
-
-            jval(1) = 3.0d0 * x(1) ** 2.0d0
-            jval(2) = - 1.0d0
-
-            ! Says whether the variables' indices in jvar (related to this
-            ! constraint) are in increasing order. In case they are,
-            ! Algencan takes advantage of this. Implement sorted gradients
-            ! of constraints if you can do this in a natural (cheap)
-            ! way. Under no circumnstance use a sorting algorithm. (It is
-            ! better to set sorted(1) = .false. in this case.)
-            
-            sorted(1) = .true.
-        end if
         
     end subroutine evalj
 
@@ -613,6 +605,8 @@ program lovo
         integer, intent(out) :: hlrow(lim),hlcol(lim)
         real(kind=8), intent(out) :: hlval(lim)
 
+        integer :: i
+
         ! This routine must compute the Hessian of the Lagrangian. The
         ! Hessian of the objective function must NOT be included if inclf
         ! = .false.
@@ -628,22 +622,16 @@ program lovo
         ! If .not. inclf then the Hessian of the objective function must not be included
         
         if ( inclf ) then
-            if ( hlnnz + 2 .gt. lim ) then
+            hlnnz = n
+            if ( hlnnz .gt. lim ) then
             inform = -95
             return
             end if
-        
-            hlnnz = hlnnz + 1
             
-            hlrow(hlnnz) = 1
-            hlcol(hlnnz) = 1
-            hlval(hlnnz) = 12.0d0 * ( x(1) + 4.0d0 ) ** 2.0d0
-        
-            hlnnz = hlnnz + 1
-            
-            hlrow(hlnnz) = 2
-            hlcol(hlnnz) = 2
-            hlval(hlnnz) = 2.0d0
+            hlrow(1:n) = (/(i, i = 1, n)/)
+            hlcol(1:n) = (/(i, i = 1, n)/)
+            hlval(1:n) = sigma
+    
         end if
 
         ! Note that entries of the Hessian of the Lagrangian can be
@@ -651,16 +639,16 @@ program lovo
         ! considered. This feature simplifies the construction of the
         ! Hessian of the Lagrangian.
         
-        if ( hlnnz + 1 .gt. lim ) then
+        if ( hlnnz .gt. lim ) then
             inform = -95
             return
         end if
         
-        hlnnz = hlnnz + 1
+        ! hlnnz = hlnnz + 1
         
-        hlrow(hlnnz) = 1
-        hlcol(hlnnz) = 1
-        hlval(hlnnz) = lambda(1) * 6.0d0 * x(1)
+        ! hlrow(hlnnz) = 1
+        ! hlcol(hlnnz) = 1
+        ! hlval(hlnnz) = lambda(1) * 6.0d0 * x(1)
         
     end subroutine evalhl
 
