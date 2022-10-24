@@ -67,8 +67,6 @@ program lovo
 
     close(100)
 
-    !--> End Reading data and storing it in the variables t and y <--
-  
     ! Number of variables
   
     n = 3
@@ -473,7 +471,9 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(1) = pdata%counters(1) + 1
         
-        f = Regularized_Taylor(x,n,ind_train,nuk,sigma)
+        ! f = Regularized_Taylor(x,n,ind_train,nuk,sigma)
+
+        f = 0
         
     end subroutine evalf
 
