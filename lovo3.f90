@@ -9,7 +9,6 @@ Program lovo
     real(kind=8) :: cnorm,efacc,efstain,eoacc,eostain,epsfeas,epsopt,f,nlpsupn,snorm
 
     ! LOCAL ARRAYS
-    character(len=15) :: strtmp
     character(len=80) :: specfnm,outputfnm,vparam(10)
     logical :: coded(11)
     logical, pointer :: equatn(:),linear(:)
@@ -82,7 +81,7 @@ Program lovo
     hnnzmax  = 10000
 
     ! Checking derivatives?
-    checkder = .false.
+    checkder = .true.
 
     ! Parameters setting
     epsfeas   = 1.0d-08
@@ -97,8 +96,12 @@ Program lovo
     outputfnm = ''
     specfnm   = ''
 
-    nvparam   = 1
+    nvparam   = 0
     vparam(1) = 'ITERATIONS-OUTPUT-DETAIL 0' 
+
+    ind_train = 1
+
+    call lovo_algorithm(ind_train)
 
 
 
@@ -107,61 +110,60 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    ! subroutine lovo_algorithm(ind_train)
+    subroutine lovo_algorithm(ind_train)
 
-    !     implicit none
+        implicit none
 
-    !     integer, intent(in) :: ind_train
-    !     real(kind=8) :: fxk,fxtrial,tol,theta
-    !     integer :: iter,iter_sub,max_iter,max_iter_sub,i
+        integer, intent(in) :: ind_train
+        real(kind=8) :: fxk,fxtrial,tol,theta
+        integer :: iter,iter_sub,max_iter,max_iter_sub,i
 
-    !     tol = 1.0d-4
-    !     max_iter = 1
-    !     max_iter_sub = 1
+        tol = 1.0d-4
+        max_iter = 1
+        max_iter_sub = 1
     
-    !     xk(:) = 1.0d0
+        xk(:) = 1.0d0
 
-    !     iter = 0
+        iter = 0
 
-    !     call compute_Fmin(xk,n,ind_train,Fmin)
+        call compute_Fmin(xk,n,Fmin)
 
-    !     call mount_Imin(xk,n,Fmin,ind_train,combi,Imin,n_Imin)
+        call mount_Imin(xk,n,Fmin,combi,Imin,n_Imin)
 
-    !     fxk = Fmin
+        fxk = Fmin
 
-    !     nuk = Imin(n_Imin)
+        nuk = Imin(n_Imin)
 
-    !     call grad_regularized_Taylor(xk,n,ind_train,nuk,sigma,grad_Fi)
+        ! call grad_regularized_Taylor(xk,n,nuk,sigma,grad_Fi)
 
-    !     print*, norm2(grad_Fi), ind_train
+        print*, norm2(grad_Fi), ind_train
 
-    !     do
-    !         iter = iter + 1
+        do
+            iter = iter + 1
             
-    !         x(1:n) = xk(1:n)
+            x(1:n) = xk(1:n)
 
-    !         sigma = sigmin
+            sigma = sigmin
 
-    !         ! do 
+            ! do 
 
-    !         ! call algencan(myevalf,myevalg,myevalh,myevalc,myevaljac,myevalhc, &
-    !         ! myevalfc,myevalgjac,myevalgjacp,myevalhl,myevalhlp,jcnnzmax, &
-    !         ! hnnzmax,epsfeas,epsopt,efstain,eostain,efacc,eoacc,outputfnm, &
-    !         ! specfnm,nvparam,vparam,n,x,l,u,m,lambda,equatn,linear,coded, &
-    !         ! checkder,f,cnorm,snorm,nlpsupn,inform)
+            call algencan(myevalf,myevalg,myevalh,myevalc,myevaljac,myevalhc, &
+            myevalfc,myevalgjac,myevalgjacp,myevalhl,myevalhlp,jcnnzmax, &
+            hnnzmax,epsfeas,epsopt,efstain,eostain,efacc,eoacc,outputfnm, &
+            specfnm,nvparam,vparam,n,x,l,u,m,lambda,equatn,linear,coded, &
+            checkder,f,cnorm,snorm,nlpsupn,inform)
 
-    !         xtrial(1:n) = x(1:n)
+            xtrial(1:n) = x(1:n)
 
-    !         call grad_regularized_Taylor(xtrial,n,ind_train,nuk,sigma,grad_Fi)
+            ! call grad_regularized_Taylor(xtrial,n,nuk,sigma,grad_Fi)
 
-    !         print*, norm2(grad_Fi), ind_train, Imin(1:n_Imin)
+            ! print*, norm2(grad_Fi), ind_train, Imin(1:n_Imin)
 
-    !         if (iter .ge. max_iter) exit
+            if (iter .ge. max_iter) exit
 
-    !     enddo
+        enddo
 
-
-    ! end subroutine lovo_algorithm
+    end subroutine lovo_algorithm
 
     ! *****************************************************************
     ! *****************************************************************
@@ -193,15 +195,15 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine regularized_Taylor(x,n,ind_train,nuk,sigma,res)
+    subroutine regularized_Taylor(x,n,nuk,sigma,res)
 
         implicit none
 
-        integer,        intent(in) :: n,nuk,ind_train
+        integer,        intent(in) :: n,nuk
         real(kind=8),   intent(in) :: x(n),sigma
         real(kind=8),   intent(out) :: res
 
-        call compute_Fmin(x,n,ind_train,res)
+        call compute_Fmin(x,n,res)
         call compute_grad_Fi(x,n,nuk,grad_Fi)
         res = res + dot_product(grad_Fi,x(1:n) - xk(1:n))
         res = res + 0.5d0 * sigma * (norm2(x(1:n) - xk(1:n))**2)
@@ -245,7 +247,7 @@ Program lovo
         res(:) = 0.0d0
 
         do i = 1, order_lovo
-            call fit_model(x,n,combi(i),ind_train,zi)
+            call fit_model(x,n,combi(i),zi)
             zi = zi - train(ind_train,combi(i))
 
             do j = 1, n
@@ -285,11 +287,11 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
+    subroutine mount_Imin(x,n,Fmin,combi,Imin,n_Imin)
 
         implicit none
 
-        integer,        intent(in) :: ind_train,n
+        integer,        intent(in) :: n
         real(kind=8),   intent(in) :: Fmin,x(n)
         integer,        intent(inout) :: combi(order_lovo)
         integer,        intent(out) :: n_Imin,Imin(r_comb)
@@ -304,7 +306,7 @@ Program lovo
             F_i = 0.0d0
             do j = 1, order_lovo
                 Fi_aux = 0.0d0
-                call fi(x,n,combi(j),ind_train,Fi_aux)
+                call fi(x,n,combi(j),Fi_aux)
                 F_i = F_i + Fi_aux
             enddo
 
@@ -319,11 +321,11 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine compute_Fmin(x,n,ind_train,res)
+    subroutine compute_Fmin(x,n,res)
 
         implicit none
 
-        integer,        intent(in) :: n,ind_train
+        integer,        intent(in) :: n
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: res
         integer :: i,kflag
@@ -335,7 +337,7 @@ Program lovo
         indices(:) = (/(i, i = 1, samples_train)/)
         
         do i = 1, samples_train
-            call fi(x,n,i,ind_train,Fmin_aux(i))
+            call fi(x,n,i,Fmin_aux(i))
         end do
 
         ! Sorting
@@ -349,15 +351,15 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine fi(x,n,i,ind_train,fun)
+    subroutine fi(x,n,i,fun)
 
         implicit none
 
-        integer,        intent(in) :: n,i,ind_train
+        integer,        intent(in) :: n,i
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: fun   
         
-        call fit_model(x,n,i,ind_train,fun)
+        call fit_model(x,n,i,fun)
         fun = 0.5d0 * ((fun - train(ind_train,i))**2)
 
     end subroutine fi
@@ -365,11 +367,11 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine fit_model(x,n,i,ind_train,res)
+    subroutine fit_model(x,n,i,res)
 
         implicit none 
 
-        integer,        intent(in) :: n,i,ind_train
+        integer,        intent(in) :: n,i
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: res
 
@@ -402,7 +404,7 @@ Program lovo
 
         flag = 0
 
-        call regularized_Taylor(x,n,ind_train,nuk,sigma,f)
+        call regularized_Taylor(x,n,nuk,sigma,f)
 
     end subroutine myevalf
 
@@ -424,8 +426,7 @@ Program lovo
 
         flag = 0
 
-        g(1:n-1) = 0.0d0
-        g(n)     = 1.0d0
+        call grad_regularized_Taylor(x,n,nuk,sigma,g)
 
     end subroutine myevalg
 
@@ -445,10 +446,16 @@ Program lovo
         real(kind=8), intent(in)  :: x(n)
         real(kind=8), intent(out) :: hval(lim)
 
+        integer :: i
+
         ! Compute (lower triangle of the) Hessian of the objective function
         flag = 0
         lmem = .false.
-        hnnz = 0
+        hnnz = n
+
+        hrow(1:n) = (/(i, i = 1, n)/)
+        hcol(1:n) = (/(i, i = 1, n)/)
+        hval(1:n) = sigma
     end subroutine myevalh
 
     !******************************************************************************
