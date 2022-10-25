@@ -132,7 +132,7 @@ program lovo
     if ( .not. rhoauto ) then
     rhoini = 1.0d-08
     end if
-
+    
     ! scale = .true. means that you allow Algencan to automatically
     ! scale the constraints. In any case, the feasibility tolerance
     ! (epsfeas) will be always satisfied by the UNSCALED original
@@ -199,12 +199,6 @@ program lovo
 
         iter = 0
 
-        do i = 1, samples_train
-            call fi(xk,n,i,ind_train,Fmin_aux(i))
-            print*, Fmin_aux(i)
-        enddo
-
-
         call compute_Fmin(xk,n,ind_train,Fmin)
 
         call mount_Imin(xk,n,Fmin,ind_train,combi,Imin,n_Imin)
@@ -213,29 +207,35 @@ program lovo
 
         nuk = Imin(n_Imin)
 
-        ! do
-        !     iter = iter + 1
+        call grad_regularized_Taylor(xk,n,ind_train,nuk,sigma,grad_Fi)
+
+        print*, norm2(grad_Fi), ind_train
+
+        do
+            iter = iter + 1
             
-        !     x(1:n) = xk(1:n)
+            x(1:n) = xk(1:n)
 
-        !     sigma = sigmin
+            sigma = sigmin
 
-        !     ! do 
+            ! do 
 
-        !     call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
-        !         n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
-        !         scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
-        !         outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
+            call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
+                n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
+                scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
+                outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
 
-        !     xtrial(1:n) = x(1:n)
+            xtrial(1:n) = x(1:n)
 
-        !     call grad_regularized_Taylor(xtrial,n,ind_train,nuk,sigma,grad_Fi)
+            print*, ierr, istop
 
-        !     ! print*, norm2(grad_Fi), ind_train
+            call grad_regularized_Taylor(xtrial,n,ind_train,nuk,sigma,grad_Fi)
 
-        !     if (iter .ge. max_iter) exit
+            print*, norm2(grad_Fi), ind_train, Imin(1:n_Imin)
 
-        ! enddo
+            if (iter .ge. max_iter) exit
+
+        enddo
 
 
     end subroutine lovo_algorithm
@@ -305,39 +305,6 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
-
-        implicit none
-
-        integer,        intent(in) :: ind_train,n
-        real(kind=8),   intent(in) :: Fmin,x(n)
-        integer,        intent(inout) :: combi(order_lovo)
-        integer,        intent(out) :: n_Imin,Imin(r_comb)
-        integer :: i,j
-        real(kind=8) :: F_i,Fi_aux
-
-        n_Imin = 0
-
-        do i = 1, r_comb
-            call comb_unrank(samples_train,order_lovo,i,combi)
-            
-            F_i = 0.0d0
-            do j = 1, order_lovo
-                call fi(x,n,combi(j),ind_train,Fi_aux)
-                F_i = F_i + Fi_aux
-            enddo
-
-            if (F_i .eq. Fmin) then
-                Imin(n_Imin + 1) = i
-                n_Imin = n_Imin + 1
-            endif
-        enddo
-
-    end subroutine mount_Imin
-
-    ! *****************************************************************
-    ! *****************************************************************
-
     subroutine compute_grad_Fi(x,n,ind_Ci,res)
         
         implicit none
@@ -396,6 +363,40 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
+    subroutine mount_Imin(x,n,Fmin,ind_train,combi,Imin,n_Imin)
+
+        implicit none
+
+        integer,        intent(in) :: ind_train,n
+        real(kind=8),   intent(in) :: Fmin,x(n)
+        integer,        intent(inout) :: combi(order_lovo)
+        integer,        intent(out) :: n_Imin,Imin(r_comb)
+        integer :: i,j
+        real(kind=8) :: F_i,Fi_aux
+
+        n_Imin = 0
+
+        do i = 1, r_comb
+            call comb_unrank(samples_train,order_lovo,i,combi)
+            
+            F_i = 0.0d0
+            do j = 1, order_lovo
+                Fi_aux = 0.0d0
+                call fi(x,n,combi(j),ind_train,Fi_aux)
+                F_i = F_i + Fi_aux
+            enddo
+
+            if (abs(F_i - Fmin) .le. 1.0d-6) then
+                Imin(n_Imin + 1) = i
+                n_Imin = n_Imin + 1
+            endif
+        enddo
+
+    end subroutine mount_Imin
+
+    ! *****************************************************************
+    ! *****************************************************************
+
     subroutine compute_Fmin(x,n,ind_train,res)
 
         implicit none
@@ -407,7 +408,7 @@ program lovo
 
         Fmin_aux(:) = 0.0d0
 
-        kflag = 2
+        kflag = 1
 
         indices(:) = (/(i, i = 1, samples_train)/)
         
