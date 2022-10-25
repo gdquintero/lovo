@@ -50,7 +50,7 @@ program lovo
     order_lovo = samples_train - 2
     r_comb = i4_choose(samples_train,order_lovo)
 
-    allocate(t(samples_train),y(samples),Fmin_aux(samples),indices(samples),&
+    allocate(t(samples_train),y(samples),Fmin_aux(samples_train),indices(samples_train),&
             Imin(r_comb),combi(order_lovo),train(rows_train,samples_train),&
             validation(rows_train,samples_validation),stat=allocerr)
 
@@ -189,7 +189,7 @@ program lovo
 
         integer, intent(in) :: ind_train
         real(kind=8) :: fxk,fxtrial,tol,theta
-        integer :: iter,iter_sub,max_iter,max_iter_sub
+        integer :: iter,iter_sub,max_iter,max_iter_sub,i
 
         tol = 1.0d-4
         max_iter = 1
@@ -199,6 +199,12 @@ program lovo
 
         iter = 0
 
+        do i = 1, samples_train
+            call fi(xk,n,i,ind_train,Fmin_aux(i))
+            print*, Fmin_aux(i)
+        enddo
+
+
         call compute_Fmin(xk,n,ind_train,Fmin)
 
         call mount_Imin(xk,n,Fmin,ind_train,combi,Imin,n_Imin)
@@ -207,29 +213,29 @@ program lovo
 
         nuk = Imin(n_Imin)
 
-        do
-            iter = iter + 1
+        ! do
+        !     iter = iter + 1
             
-            x(1:n) = xk(1:n)
+        !     x(1:n) = xk(1:n)
 
-            sigma = sigmin
+        !     sigma = sigmin
 
-            ! do 
+        !     ! do 
 
-            call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
-                n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
-                scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
-                outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
+        !     call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
+        !         n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
+        !         scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
+        !         outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
 
-            xtrial(1:n) = x(1:n)
+        !     xtrial(1:n) = x(1:n)
 
-            call grad_regularized_Taylor(xtrial,n,ind_train,nuk,sigma,grad_Fi)
+        !     call grad_regularized_Taylor(xtrial,n,ind_train,nuk,sigma,grad_Fi)
 
-            print*, norm2(grad_Fi), ind_train
+        !     ! print*, norm2(grad_Fi), ind_train
 
-            if (iter .ge. max_iter) exit
+        !     if (iter .ge. max_iter) exit
 
-        enddo
+        ! enddo
 
 
     end subroutine lovo_algorithm
@@ -603,9 +609,10 @@ program lovo
         
         if ( inclf ) then
             hlnnz = n
+
             if ( hlnnz .gt. lim ) then
-            inform = -95
-            return
+                inform = -95
+                return
             end if
             
             hlrow(1:n) = (/(i, i = 1, n)/)
@@ -623,12 +630,6 @@ program lovo
             inform = -95
             return
         end if
-        
-        ! hlnnz = hlnnz + 1
-        
-        ! hlrow(hlnnz) = 1
-        ! hlcol(hlnnz) = 1
-        ! hlval(hlnnz) = lambda(1) * 6.0d0 * x(1)
         
     end subroutine evalhl
 
