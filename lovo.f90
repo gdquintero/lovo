@@ -32,7 +32,8 @@ program lovo
 
     integer :: samples,samples_train,samples_validation,r_comb,order_lovo,rows_train,i,ind_train,n_Imin,i4_choose,nuk
     integer, allocatable :: Imin(:),combi(:)
-    real(kind=8), allocatable :: xk(:),t(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),indices(:),grad_Fi(:),hess_Fi(:,:)
+    real(kind=8), allocatable :: xtrial(:),xk(:),t(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),&
+                                 indices(:),grad_Fi(:),hess_Fi(:,:)
     real(kind=8) :: Fmin,sigma
     real(kind=8), parameter :: sigmin = 1.d0
 
@@ -70,7 +71,7 @@ program lovo
   
     n = 3
 
-    allocate(xk(n),grad_Fi(n),hess_Fi(n,n),stat=allocerr)
+    allocate(xtrial(n),xk(n),grad_Fi(n),hess_Fi(n,n),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error.'
@@ -97,6 +98,60 @@ program lovo
     m = 0
     p = 0
 
+    ! Initial guess for the Lagrange multipliers
+    
+    lambda(1:m+p) = 0.0d0
+    
+    ! Number of entries in the Jacobian of the constraints
+    
+    jnnzmax = n
+
+    ! This should be the number of entries in the Hessian of the
+    ! Lagrangian. But, in fact, some extra space is need (to store the
+    ! Hessian of the Augmented Lagrangian, whose size is hard to
+    ! predict, and/or to store the Jacobian of the KKT system). Thus,
+    ! declare it as large as possible.
+    
+    hlnnzmax = 100000
+
+    ! Feasibility, complementarity, and optimality tolerances
+    
+    epsfeas  = 1.0d-08
+    epscompl = 1.0d-08
+    epsopt   = 1.0d-08
+
+    ! Maximum number of outer iterations
+    
+    maxoutit = 50
+
+    ! rhoauto means that Algencan will automatically set the initial
+    ! value of the penalty parameter. If you set rhoauto = .false. then
+    ! you must set rhoini below with a meaningful value.
+    rhoauto = .true.
+
+    if ( .not. rhoauto ) then
+    rhoini = 1.0d-08
+    end if
+
+    ! scale = .true. means that you allow Algencan to automatically
+    ! scale the constraints. In any case, the feasibility tolerance
+    ! (epsfeas) will be always satisfied by the UNSCALED original
+    ! constraints.
+    scale = .false.
+
+    ! extallowed = .true. means that you allow Gencan (the active-set
+    ! method used by Algencan to solve the bound-constrained
+    ! subproblems) to perform extrapolations. This strategy may use
+    ! extra evaluations of the objective function and the constraints
+    ! per iterations; but it uses to provide overal savings. You should
+    ! test both choices for the problem at hand.
+    extallowed = .true.
+
+    ! extallowed = .true. means that you allow the inertia of the
+    ! Jacobian of the KKT system to be corrected during the acceleration
+    ! process. You should test both choices for the problem at hand.
+    corrin = .false.
+
     call train_test_split()
     
     allocate(lambda(m+p),c(m+p),stat=allocerr)
@@ -105,141 +160,22 @@ program lovo
        write(*,*) 'Allocation error.'
        stop
     end if
-  
-    ! Initial guess for the Lagrange multipliers
-    
-    lambda(1:m+p) = 0.0d0
-  
-    ! Number of entries in the Jacobian of the constraints
-    
-    jnnzmax = n
-  
-    ! This should be the number of entries in the Hessian of the
-    ! Lagrangian. But, in fact, some extra space is need (to store the
-    ! Hessian of the Augmented Lagrangian, whose size is hard to
-    ! predict, and/or to store the Jacobian of the KKT system). Thus,
-    ! declare it as large as possible.
-    
-    hlnnzmax = 100000
-  
-    ! Feasibility, complementarity, and optimality tolerances
-    
-    epsfeas  = 1.0d-08
-    epscompl = 1.0d-08
-    epsopt   = 1.0d-08
-  
-    ! Maximum number of outer iterations
-    
-    maxoutit = 50
-  
-    ! rhoauto means that Algencan will automatically set the initial
-    ! value of the penalty parameter. If you set rhoauto = .false. then
-    ! you must set rhoini below with a meaningful value.
-    rhoauto = .true.
-  
-    if ( .not. rhoauto ) then
-       rhoini = 1.0d-08
-    end if
-  
-    ! scale = .true. means that you allow Algencan to automatically
-    ! scale the constraints. In any case, the feasibility tolerance
-    ! (epsfeas) will be always satisfied by the UNSCALED original
-    ! constraints.
-    scale = .false.
-  
-    ! extallowed = .true. means that you allow Gencan (the active-set
-    ! method used by Algencan to solve the bound-constrained
-    ! subproblems) to perform extrapolations. This strategy may use
-    ! extra evaluations of the objective function and the constraints
-    ! per iterations; but it uses to provide overal savings. You should
-    ! test both choices for the problem at hand.
-    extallowed = .true.
-  
-    ! extallowed = .true. means that you allow the inertia of the
-    ! Jacobian of the KKT system to be corrected during the acceleration
-    ! process. You should test both choices for the problem at hand.
-    corrin = .false.
-  
-    ! call cpu_time(start)
-  
-    ! call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
-    !      n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
-    !      scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
-    !      outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
-  
-    ! call cpu_time(finish)
-  
-    ! write(*,*)
-    ! write(*,*) 'Number of variables                                   = ',n
-    ! write(*,*) 'Number of equality constraints                        = ',m
-    ! write(*,*) 'Number of inequality constraints                      = ',p
-    
-    ! write(*,*)
-    ! write(*,*) '(REPORTED BY SOLVER) istop                            = ',istop
-    ! write(*,*) '(REPORTED BY SOLVER) ierr                             = ',ierr
-    ! write(*,*) '(REPORTED BY SOLVER) f                                = ',f
-    ! write(*,*) '(REPORTED BY SOLVER) csupn                            = ',csupn
-    ! write(*,*) '(REPORTED BY SOLVER) ssupn                            = ',ssupn
-    ! write(*,*) '(REPORTED BY SOLVER) nlpsupn                          = ',nlpsupn
-    ! write(*,*) '(REPORTED BY SOLVER) bounds violation                 = ',bdsvio
-    ! write(*,*) '(REPORTED BY SOLVER) Number of outer iterations       = ',outiter
-    ! write(*,*) '(REPORTED BY SOLVER) Number of inner iterations       = ',totiter
-    ! write(*,*) '(REPORTED BY SOLVER) Number of Newton-KKT trials      = ',nwcalls
-    ! write(*,*) '(REPORTED BY SOLVER) Number of Newton-KKT iterations  = ',nwtotit
-    
-    ! write(*,*)
-    ! write(*,*) '(COMPUTED BY CALLER) Number of calls to evalf         = ',pdata%counters(1)
-    ! write(*,*) '(COMPUTED BY CALLER) Number of calls to evalg         = ',pdata%counters(2)
-    ! write(*,*) '(COMPUTED BY CALLER) Number of calls to evalc         = ',pdata%counters(3)
-    ! write(*,*) '(COMPUTED BY CALLER) Number of calls to evalj         = ',pdata%counters(4)
-    ! write(*,*) '(COMPUTED BY CALLER) Number of calls to evalhl        = ',pdata%counters(5)
-    ! write(*,*) '(COMPUTED BY CALLER) CPU time in seconds              = ',finish - start
-  
-    ! ! *****************************************************************
-    ! ! *****************************************************************
-    ! ! Just checking ...
-  
-    ! inform = 0
-    
-    ! call evalf(n,x,f,inform,c_loc(pdata))
-    
-    ! if ( inform .ne. 0 ) then
-    !    write(*,*) 'error when calling evalf in the main file. '
-    !    stop
-    ! end if
-  
-    ! call evalc(n,x,m,p,c,inform,c_loc(pdata))
-  
-    ! if ( inform .ne. 0 ) then
-    !    write(*,*) 'error when calling evalc in the main file. '
-    !    stop
-    ! end if
-  
-    ! csupn = max( 0.0d0, max( maxval( abs( c(1:m) ) ), maxval( c(m+1:m+p) ) ) )
-  
-    ! bdsvio = max( 0.0d0, max( maxval( lbnd(1:n) - x(1:n), lind(1:n) ), maxval( x(1:n) - ubnd(1:n), uind(1:n) ) ) )
-  
-    ! write(*,*)
-    ! write(*,*) '(COMPUTED BY CALLER) f                                = ',f
-    ! write(*,*) '(COMPUTED BY CALLER) csupn                            = ',csupn
-    ! write(*,*) '(COMPUTED BY CALLER) bounds violation                 = ',bdsvio
-  
-    ! write(*,*)
-    ! write(*,*) 'When a quantity appears as computed by solver and computed by caller, they must coincide.'
-    ! write(*,*) '(In case they do not coincide, please report it as a bug.)'
-    ! ! *****************************************************************
-    ! ! *****************************************************************
-    
-    ! deallocate(lind,lbnd,uind,ubnd,x,lambda,c,stat=allocerr)
-
-    ! if ( allocerr .ne. 0 ) then
-    !    write(*,*) 'Deallocation error.'
-    !    stop
-    ! end if
 
     ind_train = 1
 
+    call cpu_time(start)
     call lovo_algorithm(ind_train)
+    call cpu_time(finish)
+
+    print '("Time = ",f6.3," seconds.")',finish-start
+
+    deallocate(lind,lbnd,uind,ubnd,x,lambda,c,stat=allocerr)
+
+    if ( allocerr .ne. 0 ) then
+        write(*,*) 'Deallocation error.'
+        stop
+    end if
+    
     stop
   
     contains  
@@ -251,11 +187,17 @@ program lovo
 
         implicit none
 
-        integer,        intent(in) :: ind_train
-
+        integer, intent(in) :: ind_train
+        integer, parameter :: max_iter=1000,max_iter_sub=100
+        real(kind=8), parameter :: theta=1.0d0,tol=1.0d-6
+        real(kind=8) :: fxk, fxtrial
+        integer :: iter,iter_sub
+    
         xk(:) = 1.0d0
 
-        Fmin = compute_Fmin(xk,n,ind_train)
+        iter = 0
+
+        call compute_Fmin(xk,n,ind_train,Fmin)
 
         call mount_Imin(xk,n,Fmin,ind_train,combi,Imin,n_Imin)
 
@@ -270,7 +212,9 @@ program lovo
             scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
             outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
 
-        print*, x
+        xtrial(1:n) = x(1:n)
+
+        print*, xtrial
 
 
     end subroutine lovo_algorithm
@@ -306,19 +250,36 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    function Regularized_Taylor(x,n,ind_train,nuk,sigma) result (res)
+    subroutine regularized_Taylor(x,n,ind_train,nuk,sigma,res)
 
         implicit none
 
         integer,        intent(in) :: n,nuk,ind_train
         real(kind=8),   intent(in) :: x(n),sigma
-        real(kind=8) :: res
+        real(kind=8),   intent(out) :: res
 
-        res = compute_Fmin(x,n,ind_train)
-        res = res + dot_product(compute_grad_Fi(x,n,nuk),x(1:n) - xk(1:n))
+        call compute_Fmin(x,n,ind_train,res)
+        call compute_grad_Fi(x,n,nuk,grad_Fi)
+        res = res + dot_product(grad_Fi,x(1:n) - xk(1:n))
         res = res + 0.5d0 * sigma * (norm2(x(1:n) - xk(1:n))**2)
 
-    end function Regularized_Taylor
+    end subroutine regularized_Taylor
+
+    ! *****************************************************************
+    ! *****************************************************************
+
+    subroutine grad_regularized_Taylor(x,n,ind_train,nuk,sigma,res)
+
+        implicit none
+
+        integer,        intent(in) :: n,nuk,ind_train
+        real(kind=8),   intent(in) :: x(n),sigma
+        real(kind=8),   intent(out) :: res(n)
+
+        call compute_grad_Fi(x,n,nuk,res)
+        res = res + sigma * (x(1:n) - xk(1:n))
+
+    end subroutine grad_regularized_Taylor
 
     ! *****************************************************************
     ! *****************************************************************
@@ -335,7 +296,6 @@ program lovo
         real(kind=8) :: F_i,Fi_aux
 
         n_Imin = 0
-
 
         do i = 1, r_comb
             call comb_unrank(samples_train,order_lovo,i,combi)
@@ -357,13 +317,14 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    function compute_grad_Fi(x,n,ind_Ci) result (res)
+    subroutine compute_grad_Fi(x,n,ind_Ci,res)
         
         implicit none
 
         integer,        intent(in) :: ind_Ci,n
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8) :: res(n),zi
+        real(kind=8),   intent(out) :: res(n)
+        real(kind=8) :: zi
         integer :: i,j
 
         combi(:) = 0
@@ -374,7 +335,7 @@ program lovo
         res(:) = 0.0d0
 
         do i = 1, order_lovo
-            call model(x,n,combi(i),ind_train,zi)
+            call fit_model(x,n,combi(i),ind_train,zi)
             zi = zi - train(ind_train,combi(i))
 
             do j = 1, n
@@ -383,18 +344,18 @@ program lovo
 
         enddo
 
-    end function compute_grad_Fi
+    end subroutine compute_grad_Fi
 
     ! *****************************************************************
     ! *****************************************************************
 
-    function compute_hess_Fi(n,ind_Ci,combi) result (res)
+    subroutine compute_hess_Fi(n,ind_Ci,combi,res)
 
         implicit none
 
         integer,        intent(in) :: ind_Ci,n
         integer,        intent(inout) :: combi(order_lovo)
-        real(kind=8) :: res(n,n)
+        real(kind=8),   intent(out) :: res(n,n)
         integer :: i,j,k
 
         call comb_unrank(samples_train,order_lovo,ind_Ci,combi)
@@ -409,18 +370,18 @@ program lovo
             enddo
         enddo
 
-    end function compute_hess_Fi
+    end subroutine compute_hess_Fi
 
     ! *****************************************************************
     ! *****************************************************************
 
-    function compute_Fmin(x,n,ind_train) result (res)
+    subroutine compute_Fmin(x,n,ind_train,res)
 
         implicit none
 
         integer,        intent(in) :: n,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8) :: res
+        real(kind=8),   intent(out) :: res
         integer :: i,kflag
 
         Fmin_aux(:) = 0.0d0
@@ -439,7 +400,7 @@ program lovo
         ! Lovo function 
         res = sum(Fmin_aux(1:order_lovo))
 
-    end function compute_Fmin
+    end subroutine compute_Fmin
 
     ! *****************************************************************
     ! *****************************************************************
@@ -452,7 +413,7 @@ program lovo
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: fun   
         
-        call model(x,n,i,ind_train,fun)
+        call fit_model(x,n,i,ind_train,fun)
         fun = 0.5d0 * ((fun - train(ind_train,i))**2)
 
     end subroutine fi
@@ -460,20 +421,20 @@ program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine model(x,n,i,ind_train,fun)
+    subroutine fit_model(x,n,i,ind_train,res)
 
         implicit none 
 
         integer,        intent(in) :: n,i,ind_train
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out) :: fun
+        real(kind=8),   intent(out) :: res
 
-        fun = train(ind_train,samples_train) + &
+        res = train(ind_train,samples_train) + &
             x(1) * (t(i) - t(samples_train)) + &
             x(2) * (t(i) - t(samples_train))**2 + &
             x(3) * (t(i) - t(samples_train))**3
         
-    end subroutine model
+    end subroutine fit_model
 
     ! *****************************************************************
     ! *****************************************************************
@@ -499,7 +460,7 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(1) = pdata%counters(1) + 1
         
-        f = Regularized_Taylor(x,n,ind_train,nuk,sigma)
+        call regularized_Taylor(x,n,ind_train,nuk,sigma,f)
         
     end subroutine evalf
 
@@ -528,7 +489,7 @@ program lovo
         call c_f_pointer(pdataptr,pdata)
         pdata%counters(2) = pdata%counters(2) + 1
         
-        g(:) = compute_grad_Fi(x,n,nuk) + sigma * (x(1:n) - xk(1:n))
+        call grad_regularized_Taylor(x,n,ind_train,nuk,sigma,g)
 
     end subroutine evalg
 
