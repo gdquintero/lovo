@@ -211,11 +211,11 @@ Program lovo
     ! *****************************************************************
     ! *****************************************************************
 
-    subroutine grad_regularized_Taylor(x,n,ind_train,nuk,sigma,res)
+    subroutine grad_regularized_Taylor(x,n,nuk,sigma,res)
 
         implicit none
 
-        integer,        intent(in) :: n,nuk,ind_train
+        integer,        intent(in) :: n,nuk
         real(kind=8),   intent(in) :: x(n),sigma
         real(kind=8),   intent(out) :: res(n)
 
@@ -402,7 +402,7 @@ Program lovo
 
         flag = 0
 
-        f = x(n)
+        call regularized_Taylor(x,n,ind_train,nuk,sigma,f)
 
     end subroutine myevalf
 
@@ -486,8 +486,6 @@ Program lovo
         integer, intent(out) :: jcvar(lim)
         real(kind=8), intent(in) :: x(n)
         real(kind=8), intent(out) :: jcval(lim)
-
-        integer :: i
 
         flag = -1
 
