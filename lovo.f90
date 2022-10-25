@@ -167,7 +167,7 @@ program lovo
     call lovo_algorithm(ind_train)
     call cpu_time(finish)
 
-    print '("Time = ",f6.3," seconds.")',finish-start
+    print '("Time = ",f6.6," seconds.")',finish-start
 
     deallocate(lind,lbnd,uind,ubnd,x,lambda,c,stat=allocerr)
 
@@ -175,7 +175,7 @@ program lovo
         write(*,*) 'Deallocation error.'
         stop
     end if
-    
+
     stop
   
     contains  
