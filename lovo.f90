@@ -188,10 +188,12 @@ program lovo
         implicit none
 
         integer, intent(in) :: ind_train
-        integer, parameter :: max_iter=1000,max_iter_sub=100
-        real(kind=8), parameter :: theta=1.0d0,tol=1.0d-6
-        real(kind=8) :: fxk, fxtrial
-        integer :: iter,iter_sub
+        real(kind=8) :: fxk,fxtrial,tol,theta
+        integer :: iter,iter_sub,max_iter,max_iter_sub
+
+        tol = 1.0d-4
+        max_iter = 1
+        max_iter_sub = 1
     
         xk(:) = 1.0d0
 
@@ -201,20 +203,33 @@ program lovo
 
         call mount_Imin(xk,n,Fmin,ind_train,combi,Imin,n_Imin)
 
+        fxk = Fmin
+
         nuk = Imin(n_Imin)
 
-        x(1:n) = xk(1:n)
+        do
+            iter = iter + 1
+            
+            x(1:n) = xk(1:n)
 
-        sigma = sigmin
+            sigma = sigmin
 
-        call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
-            n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
-            scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
-            outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
+            ! do 
 
-        xtrial(1:n) = x(1:n)
+            call algencan(evalf,evalg,evalc,evalj,evalhl,jnnzmax,hlnnzmax, &
+                n,x,lind,lbnd,uind,ubnd,m,p,lambda,epsfeas,epscompl,epsopt,maxoutit, &
+                scale,rhoauto,rhoini,extallowed,corrin,f,csupn,ssupn,nlpsupn,bdsvio, &
+                outiter,totiter,nwcalls,nwtotit,ierr,istop,c_loc(pdata))
 
-        print*, xtrial
+            xtrial(1:n) = x(1:n)
+
+            call grad_regularized_Taylor(xtrial,n,ind_train,nuk,sigma,grad_Fi)
+
+            print*, norm2(grad_Fi), ind_train
+
+            if (iter .ge. max_iter) exit
+
+        enddo
 
 
     end subroutine lovo_algorithm
