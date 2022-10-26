@@ -81,7 +81,7 @@ Program lovo
     hnnzmax  = 10000
 
     ! Checking derivatives?
-    checkder = .false.
+    checkder = .true.
 
     ! Parameters setting
     epsfeas   = 1.0d-08
@@ -364,10 +364,13 @@ Program lovo
 
         integer,        intent(in) :: n,i
         real(kind=8),   intent(in) :: x(n)
-        real(kind=8),   intent(out) :: fun   
+        real(kind=8),   intent(out) :: fun 
+        real(kind=8) :: yi
+
+        yi = train(ind_train,i)
         
         call fit_model(x,n,i,fun)
-        fun = 0.5d0 * ((fun - train(ind_train,i))**2)
+        fun = 0.5d0 * ((fun - yi)**2)
 
     end subroutine fi
 
@@ -382,11 +385,13 @@ Program lovo
         integer,        intent(in) :: n,i
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: res
+        real(kind=8) :: ti,tm,ym
 
-        res = train(ind_train,samples_train) + &
-            x(1) * (t(i) - t(samples_train)) + &
-            x(2) * (t(i) - t(samples_train))**2 + &
-            x(3) * (t(i) - t(samples_train))**3
+        ym = train(ind_train,samples_train)
+        ti = t(i)
+        tm = t(samples_train)
+
+        res = ym + x(1) * (ti - tm) + x(2) * ((ti - tm)**2) + x(3) * ((ti - tm)**3)
         
     end subroutine fit_model
 
