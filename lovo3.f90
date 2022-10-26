@@ -319,6 +319,7 @@ Program lovo
                 Imin(n_Imin + 1) = i
                 n_Imin = n_Imin + 1
             endif
+            combi(:) = 0
         enddo
 
     end subroutine mount_Imin
