@@ -81,7 +81,7 @@ Program lovo
     hnnzmax  = 10000
 
     ! Checking derivatives?
-    checkder = .true.
+    checkder = .false.
 
     ! Parameters setting
     epsfeas   = 1.0d-08
@@ -103,11 +103,10 @@ Program lovo
 
     call lovo_algorithm(ind_train)
 
-
-
     CONTAINS
 
     ! *****************************************************************
+    ! MAIN ALGORITHM (WEAKLY CRITICAL POINTS)
     ! *****************************************************************
 
     subroutine lovo_algorithm(ind_train)
@@ -166,6 +165,7 @@ Program lovo
     end subroutine lovo_algorithm
 
     ! *****************************************************************
+    ! DIVISION OF THE DATA SET
     ! *****************************************************************
 
     subroutine train_test_split()
@@ -193,6 +193,7 @@ Program lovo
     end subroutine train_test_split
 
     ! *****************************************************************
+    ! REGULARIZED MODEL
     ! *****************************************************************
 
     subroutine regularized_Taylor(x,n,nuk,sigma,res)
@@ -211,6 +212,7 @@ Program lovo
     end subroutine regularized_Taylor
 
     ! *****************************************************************
+    ! REGULARIZED MODEL GRADIENT
     ! *****************************************************************
 
     subroutine grad_regularized_Taylor(x,n,nuk,sigma,res)
@@ -227,6 +229,7 @@ Program lovo
     end subroutine grad_regularized_Taylor
 
     ! *****************************************************************
+    ! GRADIENT OF ERROR FUNCTIONS
     ! *****************************************************************
 
     subroutine compute_grad_Fi(x,n,ind_Ci,res)
@@ -259,6 +262,7 @@ Program lovo
     end subroutine compute_grad_Fi
 
     ! *****************************************************************
+    ! HESSIAN OF ERROR FUNCTIONS
     ! *****************************************************************
 
     subroutine compute_hess_Fi(n,ind_Ci,combi,res)
@@ -285,6 +289,7 @@ Program lovo
     end subroutine compute_hess_Fi
 
     ! *****************************************************************
+    ! I_min(x)
     ! *****************************************************************
 
     subroutine mount_Imin(x,n,Fmin,combi,Imin,n_Imin)
@@ -319,6 +324,7 @@ Program lovo
     end subroutine mount_Imin
 
     ! *****************************************************************
+    ! LOVO FUNCTION
     ! *****************************************************************
 
     subroutine compute_Fmin(x,n,res)
@@ -349,6 +355,7 @@ Program lovo
     end subroutine compute_Fmin
 
     ! *****************************************************************
+    ! QUADRATIC ERROR FUNCTIONS
     ! *****************************************************************
 
     subroutine fi(x,n,i,fun)
@@ -365,6 +372,7 @@ Program lovo
     end subroutine fi
 
     ! *****************************************************************
+    ! MODEL TO BE ADJUSTED
     ! *****************************************************************
 
     subroutine fit_model(x,n,i,res)
