@@ -17,8 +17,8 @@ Program lovo
     !--> LOVO Algorithm variables <--
 
     integer :: samples,samples_train,samples_validation,r_comb,order_lovo,rows_train,i,ind_train,n_Imin,i4_choose,nuk
-    integer, allocatable :: Imin(:),combi(:)
-    real(kind=8), allocatable :: xtrial(:),xk(:),t(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),&
+    integer, allocatable :: Imin(:),combi(:),t(:)
+    real(kind=8), allocatable :: xtrial(:),xk(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),&
                                  indices(:),grad_Fi(:),hess_Fi(:,:)
     real(kind=8) :: Fmin,sigma
     real(kind=8), parameter :: sigmin = 1.d0
@@ -52,6 +52,8 @@ Program lovo
     t(:) = (/(i, i = 1, samples_train)/)
 
     close(100)
+
+    call train_test_split()
 
     ! Set parameters
     n = 3
@@ -125,17 +127,19 @@ Program lovo
 
         iter = 0
 
-        call compute_Fmin(xk,n,Fmin)
+        ! call compute_Fmin(xk,n,Fmin)
 
-        call mount_Imin(xk,n,Fmin,combi,Imin,n_Imin)
+        ! call mount_Imin(xk,n,Fmin,combi,Imin,n_Imin)
 
-        fxk = Fmin
+        ! fxk = Fmin
 
-        nuk = Imin(n_Imin)
+        ! nuk = Imin(n_Imin)
 
         ! call grad_regularized_Taylor(xk,n,nuk,sigma,grad_Fi)
 
-        print*, norm2(grad_Fi), ind_train
+        ! print*, norm2(grad_Fi), ind_train
+
+        stop
 
         do
             iter = iter + 1
@@ -205,7 +209,7 @@ Program lovo
         real(kind=8),   intent(out) :: res
 
         call compute_Fmin(x,n,res)
-        call compute_grad_Fi(x,n,nuk,grad_Fi)
+        call compute_grad_F_i(x,n,nuk,grad_Fi)
         res = res + dot_product(grad_Fi,x(1:n) - xk(1:n))
         res = res + 0.5d0 * sigma * (norm2(x(1:n) - xk(1:n))**2)
 
@@ -223,24 +227,24 @@ Program lovo
         real(kind=8),   intent(in) :: x(n),sigma
         real(kind=8),   intent(out) :: res(n)
 
-        call compute_grad_Fi(x,n,nuk,res)
+        call compute_grad_F_i(x,n,nuk,res)
         res = res + sigma * (x(1:n) - xk(1:n))
 
     end subroutine grad_regularized_Taylor
 
     ! *****************************************************************
-    ! GRADIENT OF ERROR FUNCTIONS
+    ! GRADIENT OF ERROR FUNCTIONS Fi
     ! *****************************************************************
 
-    subroutine compute_grad_Fi(x,n,ind_Ci,res)
+    subroutine compute_grad_F_i(x,n,ind_Ci,res)
         
         implicit none
 
         integer,        intent(in) :: ind_Ci,n
         real(kind=8),   intent(in) :: x(n)
         real(kind=8),   intent(out) :: res(n)
-        real(kind=8) :: zi
-        integer :: i,j
+        real(kind=8) :: zi,yi
+        integer :: i,j,ti,tm
 
         combi(:) = 0
 
@@ -249,17 +253,24 @@ Program lovo
         zi = 0.0d0
         res(:) = 0.0d0
 
+        tm = t(samples_train)
+
         do i = 1, order_lovo
+            ti = t(combi(i))
+            yi = train(ind_train,combi(i))
+
             call fit_model(x,n,combi(i),zi)
-            zi = zi - train(ind_train,combi(i))
+            zi = zi - yi
 
             do j = 1, n
-                res(j) = res(j) + zi * ((t(combi(i)) - t(samples_train))**j)
+                res(j) = res(j) + zi * ((ti - tm)**j)
             enddo
 
         enddo
 
-    end subroutine compute_grad_Fi
+        combi(:) = 0
+
+    end subroutine compute_grad_F_i
 
     ! *****************************************************************
     ! HESSIAN OF ERROR FUNCTIONS
@@ -289,6 +300,38 @@ Program lovo
     end subroutine compute_hess_Fi
 
     ! *****************************************************************
+    ! GRADIENT OF ERROR FUNCTIONS
+    ! *****************************************************************
+
+    subroutine compute_grad_fi(x,n,ind,res)
+        
+        implicit none
+
+        integer,        intent(in) :: ind,n
+        real(kind=8),   intent(in) :: x(n)
+        real(kind=8),   intent(out) :: res(n)
+        real(kind=8) :: zi,yi
+        integer :: ti,tm
+
+        zi = 0.0d0
+        ti = t(ind)
+        tm = t(samples_train)
+        yi = train(ind_train,ind)
+        res(:) = 0.0d0
+
+        call fit_model(x,n,ind,zi)
+
+        zi = zi - yi
+
+        res(1) = ti - tm
+        res(2) = (ti - tm)**2
+        res(3) = (ti - tm)**3
+
+        res(1:n) = zi * res(1:n)
+
+    end subroutine compute_grad_fi
+
+    ! *****************************************************************
     ! I_min(x)
     ! *****************************************************************
 
@@ -304,6 +347,7 @@ Program lovo
         real(kind=8) :: F_i,Fi_aux
 
         n_Imin = 0
+        combi(:) = 0
 
         do i = 1, r_comb
             call comb_unrank(samples_train,order_lovo,i,combi)
@@ -339,7 +383,7 @@ Program lovo
 
         Fmin_aux(:) = 0.0d0
 
-        kflag = 1
+        kflag = 2
 
         indices(:) = (/(i, i = 1, samples_train)/)
         
@@ -392,7 +436,10 @@ Program lovo
         ti = t(i)
         tm = t(samples_train)
 
-        res = ym + x(1) * (ti - tm) + x(2) * ((ti - tm)**2) + x(3) * ((ti - tm)**3)
+        res = x(1) * (ti - tm)
+        res = res + x(2) * ((ti - tm)**2)
+        res = res + x(3) * ((ti - tm)**3)
+        res = res + ym
         
     end subroutine fit_model
 
