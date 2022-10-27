@@ -19,7 +19,7 @@ Program lovo
     integer :: samples,samples_train,samples_validation,r_comb,order_lovo,rows_train,i,ind_train,n_Imin,i4_choose,nuk
     integer, allocatable :: Imin(:),combi(:),t(:)
     real(kind=8), allocatable :: xtrial(:),xk(:),y(:),train(:,:),validation(:,:),Fmin_aux(:),&
-                                 indices(:),grad_Fi(:),hess_Fi(:,:)
+                                 indices(:),grad_Fi(:),hess_Fi(:,:),grad_aux(:)
     real(kind=8) :: Fmin,sigma
     real(kind=8), parameter :: sigmin = 1.d0
 
@@ -60,7 +60,7 @@ Program lovo
     m = 0
 
     allocate(x(n),l(n),u(n),equatn(m),linear(m),lambda(m),&
-            xtrial(n),xk(n),grad_Fi(n),hess_Fi(n,n),stat=allocerr)
+            xtrial(n),xk(n),grad_Fi(n),hess_Fi(n,n),grad_aux(n),stat=allocerr)
 
     if ( allocerr .ne. 0 ) then
         write(*,*) 'Allocation error.'
@@ -127,15 +127,15 @@ Program lovo
 
         iter = 0
 
-        ! call compute_Fmin(xk,n,Fmin)
+        call compute_Fmin(xk,n,Fmin)
 
-        ! call mount_Imin(xk,n,Fmin,combi,Imin,n_Imin)
+        call mount_Imin(xk,n,Fmin,combi,Imin,n_Imin)
 
-        ! fxk = Fmin
+        fxk = Fmin
 
-        ! nuk = Imin(n_Imin)
+        nuk = Imin(n_Imin)
 
-        ! call grad_regularized_Taylor(xk,n,nuk,sigma,grad_Fi)
+        call grad_regularized_Taylor(xk,n,nuk,sigma,grad_Fi)
 
         ! print*, norm2(grad_Fi), ind_train
 
@@ -252,20 +252,13 @@ Program lovo
         
         zi = 0.0d0
         res(:) = 0.0d0
+        grad_aux(:) = 0.0d0
 
         tm = t(samples_train)
 
         do i = 1, order_lovo
-            ti = t(combi(i))
-            yi = train(ind_train,combi(i))
-
-            call fit_model(x,n,combi(i),zi)
-            zi = zi - yi
-
-            do j = 1, n
-                res(j) = res(j) + zi * ((ti - tm)**j)
-            enddo
-
+            call compute_grad_fi(x,n,combi(i),grad_aux)
+            res(1:n) = res(1:n) + grad_aux(1:n)
         enddo
 
         combi(:) = 0
